@@ -15,9 +15,9 @@ export default function TabsLayout() {
         tabBarInactiveTintColor: colors.textMuted,
         tabBarShowLabel: true,
         tabBarLabelStyle: {
-          fontSize: 10,
+          fontSize: 9,
           fontWeight: "800",
-          letterSpacing: 1.5,
+          letterSpacing: 1.2,
           marginTop: -2,
         },
         tabBarStyle: {
@@ -52,15 +52,19 @@ export default function TabsLayout() {
         name="add"
         options={{
           title: "INTAKE",
-          tabBarIcon: ({ color, focused }) => (
-            <View
-              style={[
-                styles.addBtn,
-                { backgroundColor: focused ? colors.accent : colors.accent },
-              ]}
-            >
+          tabBarIcon: () => (
+            <View style={styles.addBtn}>
               <Ionicons name="add" size={26} color="#000" />
             </View>
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="analytics"
+        options={{
+          title: "STATS",
+          tabBarIcon: ({ color }) => (
+            <Ionicons name="bar-chart" size={22} color={color} />
           ),
         }}
       />
@@ -84,5 +88,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginTop: -10,
+    backgroundColor: colors.accent,
   },
 });

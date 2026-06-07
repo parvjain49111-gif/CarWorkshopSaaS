@@ -6,6 +6,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import io
 import csv
+import re
 import logging
 import uuid
 import httpx
@@ -390,6 +391,170 @@ async def get_stats(request: Request):
         "in_progress": counts.get("in_progress", 0),
         "completed": counts.get("completed", 0),
         "recent": recent,
+    }
+
+
+@api_router.get("/analytics")
+async def get_analytics(request: Request):
+    """Founder-level KPIs: trends, brands, issues, references, revenue, turnaround."""
+    await get_current_user(request)
+    jobs = await db.jobs.find({}, {"_id": 0}).sort("created_at", -1).to_list(length=10000)
+    now = datetime.now(timezone.utc)
+
+    # ----- Status counts
+    status_counts = {"pending": 0, "in_progress": 0, "completed": 0}
+    for j in jobs:
+        s = j.get("status") or "pending"
+        if s in status_counts:
+            status_counts[s] += 1
+
+    # ----- Time windows (7d / 30d)
+    def parse_dt(s):
+        try:
+            d = datetime.fromisoformat(s.replace("Z", "+00:00"))
+            return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
+        except Exception:
+            return None
+
+    in_7d = 0
+    in_30d = 0
+    daily_buckets: dict = {}  # last 14 days
+    for j in jobs:
+        d = parse_dt(j.get("created_at", ""))
+        if not d:
+            continue
+        delta_days = (now - d).days
+        if delta_days <= 7:
+            in_7d += 1
+        if delta_days <= 30:
+            in_30d += 1
+        if delta_days <= 13:
+            key = d.strftime("%Y-%m-%d")
+            daily_buckets[key] = daily_buckets.get(key, 0) + 1
+
+    # Last 14 daily series ordered ascending
+    daily_series = []
+    for i in range(13, -1, -1):
+        day = (now - timedelta(days=i)).strftime("%Y-%m-%d")
+        daily_series.append({"date": day, "count": daily_buckets.get(day, 0)})
+
+    # ----- Brand breakdown (first token of car_name)
+    brand_counts: dict = {}
+    for j in jobs:
+        car_name = (j.get("car_name") or "").strip()
+        if not car_name:
+            continue
+        brand = car_name.split()[0].title()
+        brand_counts[brand] = brand_counts.get(brand, 0) + 1
+    brands = sorted(
+        [{"label": k, "count": v} for k, v in brand_counts.items()],
+        key=lambda x: x["count"],
+        reverse=True,
+    )[:8]
+
+    # ----- Reference (referral source) breakdown
+    ref_counts: dict = {}
+    for j in jobs:
+        ref = (j.get("reference") or "").strip()
+        if not ref:
+            ref = "Walk-in"
+        ref_counts[ref] = ref_counts.get(ref, 0) + 1
+    references = sorted(
+        [{"label": k, "count": v} for k, v in ref_counts.items()],
+        key=lambda x: x["count"],
+        reverse=True,
+    )[:8]
+
+    # ----- Issue keywords (top words from customer_problems)
+    STOP = {
+        "the","a","an","is","it","of","to","in","on","and","or","with","my","for",
+        "i","me","not","but","at","by","be","this","that","has","have","had","car",
+        "from","as","so","very","when","its","while","also","please","sir","need",
+        "needs","getting","got","showing","problem","problems","issue","issues",
+        "vehicle","there","they","their","your","you","we","us","am","are","was",
+        "were","do","does","done","just","only","than","then","into","out","up",
+        "down","some","any","all","more","most","less","still","again",
+    }
+    word_counts: dict = {}
+    for j in jobs:
+        text = (j.get("customer_problems") or "").lower()
+        for w in re.split(r"[^a-z]+", text):
+            if len(w) < 3 or w in STOP:
+                continue
+            word_counts[w] = word_counts.get(w, 0) + 1
+    issues = sorted(
+        [{"label": k.title(), "count": v} for k, v in word_counts.items()],
+        key=lambda x: x["count"],
+        reverse=True,
+    )[:8]
+
+    # ----- Revenue (sum of spare parts qty*price across all jobs)
+    revenue_total = 0.0
+    revenue_completed = 0.0
+    parts_total = 0
+    for j in jobs:
+        for p in j.get("spare_parts") or []:
+            price = p.get("price") or 0
+            qty = p.get("quantity") or 1
+            revenue_total += price * qty
+            parts_total += qty
+            if j.get("status") == "completed":
+                revenue_completed += price * qty
+
+    # ----- Avg turnaround for completed jobs (hours)
+    durations = []
+    for j in jobs:
+        if j.get("status") != "completed":
+            continue
+        c = parse_dt(j.get("created_at", ""))
+        u = parse_dt(j.get("updated_at", ""))
+        if c and u and u > c:
+            durations.append((u - c).total_seconds() / 3600.0)
+    avg_turnaround_hours = round(sum(durations) / len(durations), 1) if durations else None
+
+    # ----- Top returning customers (by customer_name)
+    customer_counts: dict = {}
+    for j in jobs:
+        name = (j.get("customer_name") or "").strip()
+        if not name:
+            continue
+        customer_counts[name] = customer_counts.get(name, 0) + 1
+    top_customers = sorted(
+        [{"label": k, "count": v} for k, v in customer_counts.items() if v > 1],
+        key=lambda x: x["count"],
+        reverse=True,
+    )[:6]
+
+    # ----- Mechanic workload (assigned_mechanic)
+    mech_counts: dict = {}
+    for j in jobs:
+        m = (j.get("assigned_mechanic") or "").strip()
+        if not m:
+            continue
+        mech_counts[m] = mech_counts.get(m, 0) + 1
+    mechanics = sorted(
+        [{"label": k, "count": v} for k, v in mech_counts.items()],
+        key=lambda x: x["count"],
+        reverse=True,
+    )[:6]
+
+    return {
+        "total_jobs": len(jobs),
+        "status_counts": status_counts,
+        "intake_7d": in_7d,
+        "intake_30d": in_30d,
+        "daily_series": daily_series,
+        "brands": brands,
+        "references": references,
+        "issues": issues,
+        "revenue_total": round(revenue_total, 2),
+        "revenue_completed": round(revenue_completed, 2),
+        "parts_total": parts_total,
+        "avg_turnaround_hours": avg_turnaround_hours,
+        "completed_count": status_counts.get("completed", 0),
+        "top_customers": top_customers,
+        "mechanics": mechanics,
+        "unique_customers": len({(j.get("customer_name") or "").strip() for j in jobs if j.get("customer_name")}),
     }
 
 

@@ -89,4 +89,5 @@ export const api = {
   updateJob: (id: string, body: any) =>
     apiRequest(`/jobs/${id}`, { method: "PATCH", body }),
   stats: () => apiRequest(`/stats`),
+  analytics: () => apiRequest(`/analytics`),
 };
