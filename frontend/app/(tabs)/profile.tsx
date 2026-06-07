@@ -2,12 +2,14 @@ import { useState } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator, Platform, Linking } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 
 import { useAuth } from "@/src/lib/auth";
 import { colors } from "@/src/lib/theme";
 import { downloadJobsCsv } from "@/src/lib/export";
 
 export default function ProfileScreen() {
+  const router = useRouter();
   const { user, logout } = useAuth();
   const [downloading, setDownloading] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -107,6 +109,17 @@ export default function ProfileScreen() {
           }
         />
       </View>
+
+      <TouchableOpacity
+        testID="view-all-data-btn"
+        activeOpacity={0.85}
+        onPress={() => router.push("/data")}
+        style={styles.viewDataBtn}
+      >
+        <Ionicons name="grid" size={18} color="#000" />
+        <Text style={styles.viewDataText}>VIEW ALL DATA · IN APP</Text>
+        <Ionicons name="chevron-forward" size={16} color="#000" />
+      </TouchableOpacity>
 
       <TouchableOpacity
         testID="export-csv-button"
@@ -238,11 +251,21 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 10,
-    marginTop: 28,
+    marginTop: 10,
     paddingVertical: 16,
     backgroundColor: colors.accent,
   },
   exportText: { color: "#000", fontWeight: "900", letterSpacing: 2, fontSize: 13 },
+  viewDataBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    marginTop: 28,
+    paddingVertical: 16,
+    backgroundColor: colors.accent,
+  },
+  viewDataText: { color: "#000", fontWeight: "900", letterSpacing: 2, fontSize: 13, flex: 1, textAlign: "center" },
   exportAlt: {
     flexDirection: "row",
     alignItems: "center",

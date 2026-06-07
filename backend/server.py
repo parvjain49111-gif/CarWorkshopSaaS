@@ -333,6 +333,99 @@ async def export_jobs_csv(
     )
 
 
+@api_router.get("/jobs/export.xlsx")
+async def export_jobs_xlsx(
+    request: Request,
+    status: Optional[str] = Query(None),
+    q: Optional[str] = Query(None),
+):
+    """Export all jobs as a real Excel (.xlsx) workbook."""
+    await get_current_user(request)
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment
+
+    query: dict = {}
+    if status and status != "all":
+        query["status"] = status
+    if q:
+        query["$or"] = [
+            {"car_number": {"$regex": q, "$options": "i"}},
+            {"customer_name": {"$regex": q, "$options": "i"}},
+            {"car_name": {"$regex": q, "$options": "i"}},
+        ]
+    rows = await db.jobs.find(query, {"_id": 0}).sort("created_at", -1).to_list(length=10000)
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Workshop Jobs"
+
+    headers = [
+        "Job ID", "Created At", "Updated At", "Status",
+        "Customer Name", "Phone", "Reference",
+        "Car Name", "Car Number", "Model Year",
+        "Customer Problems", "Mechanic Findings",
+        "Parts Count", "Parts Total ₹", "Parts Detail",
+        "Photos Count", "Front", "Back", "Left", "Right",
+    ]
+    ws.append(headers)
+    header_fill = PatternFill("solid", fgColor="FFD600")
+    header_font = Font(bold=True, color="000000")
+    for col_idx in range(1, len(headers) + 1):
+        cell = ws.cell(row=1, column=col_idx)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="left", vertical="center")
+
+    for r in rows:
+        parts = r.get("spare_parts") or []
+        total_price = sum((p.get("price") or 0) * (p.get("quantity") or 1) for p in parts)
+        parts_detail = " | ".join(
+            f"{p.get('name')} x{p.get('quantity', 1)} ({p.get('status', 'pending')})" for p in parts
+        )
+        photos = r.get("photos") or {}
+        photo_keys = ["front", "back", "left", "right"]
+        photos_count = sum(1 for k in photo_keys if photos.get(k))
+        ws.append([
+            r.get("job_id", ""),
+            r.get("created_at", ""),
+            r.get("updated_at", ""),
+            (r.get("status") or "").replace("_", " ").title(),
+            r.get("customer_name", ""),
+            r.get("customer_phone", "") or "",
+            r.get("reference", "") or "",
+            r.get("car_name", ""),
+            r.get("car_number", ""),
+            r.get("model_year", "") or "",
+            r.get("customer_problems", "") or "",
+            r.get("mechanic_findings", "") or "",
+            len(parts),
+            round(total_price, 2) if total_price else 0,
+            parts_detail,
+            photos_count,
+            "Yes" if photos.get("front") else "",
+            "Yes" if photos.get("back") else "",
+            "Yes" if photos.get("left") else "",
+            "Yes" if photos.get("right") else "",
+        ])
+
+    # Auto-size columns (cap at 50)
+    widths = [12, 22, 22, 14, 22, 14, 16, 22, 14, 10, 40, 40, 10, 14, 50, 10, 8, 8, 8, 8]
+    for idx, w in enumerate(widths, start=1):
+        ws.column_dimensions[chr(64 + idx) if idx <= 26 else f"A{chr(64 + idx - 26)}"].width = w
+
+    ws.freeze_panes = "A2"
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    filename = f"workshop_jobs_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.xlsx"
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @api_router.get("/jobs/{job_id}", response_model=Job)
 async def get_job(job_id: str, request: Request):
     await get_current_user(request)
