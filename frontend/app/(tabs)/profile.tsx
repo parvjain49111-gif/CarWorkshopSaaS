@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator, Platform, Linking } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -23,6 +23,41 @@ export default function ProfileScreen() {
     } else {
       setToast(`Failed: ${res.error}`);
       setTimeout(() => setToast(null), 4000);
+    }
+  };
+
+  const onOpenInBrowser = async () => {
+    if (downloading) return;
+    setDownloading(true);
+    try {
+      const BASE = process.env.EXPO_PUBLIC_BACKEND_URL || "";
+      const tokenRaw = await (await import("@/src/utils/storage")).storage.getItem<string>(
+        "workshop_session_token",
+        "",
+      );
+      const token = (tokenRaw as string) || "";
+      const res = await fetch(`${BASE}/api/jobs/export.csv`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const text = await res.text();
+      if (Platform.OS === "web") {
+        const blob = new Blob([text], { type: "text/csv;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        window.open(url, "_blank");
+        setToast("CSV opened in new tab — use browser File → Save As");
+      } else {
+        await Linking.openURL(
+          `data:text/csv;charset=utf-8,${encodeURIComponent(text)}`,
+        );
+        setToast("CSV opened — long-press to save or share");
+      }
+      setTimeout(() => setToast(null), 5000);
+    } catch (e: any) {
+      setToast(`Failed: ${e?.message || "Open failed"}`);
+      setTimeout(() => setToast(null), 4000);
+    } finally {
+      setDownloading(false);
     }
   };
 
@@ -88,6 +123,16 @@ export default function ProfileScreen() {
             <Text style={styles.exportText}>EXPORT DATA · CSV</Text>
           </>
         )}
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        testID="open-csv-button"
+        activeOpacity={0.85}
+        onPress={onOpenInBrowser}
+        style={styles.exportAlt}
+      >
+        <Ionicons name="open-outline" size={16} color={colors.accent} />
+        <Text style={styles.exportAltText}>OR OPEN IN BROWSER TO COPY · SAVE AS</Text>
       </TouchableOpacity>
 
       <Text style={styles.exportHint}>
@@ -198,6 +243,17 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accent,
   },
   exportText: { color: "#000", fontWeight: "900", letterSpacing: 2, fontSize: 13 },
+  exportAlt: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginTop: 10,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: colors.accent,
+  },
+  exportAltText: { color: colors.accent, fontWeight: "900", letterSpacing: 1.5, fontSize: 11 },
   exportHint: {
     color: colors.textMuted,
     fontSize: 11,

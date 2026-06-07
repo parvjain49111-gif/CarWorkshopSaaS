@@ -306,60 +306,85 @@ export default function JobDetailScreen() {
 
         {/* Spare parts */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>SPARE PARTS</Text>
+          <View style={styles.partsHeader}>
+            <Text style={styles.sectionTitle}>SPARE PARTS</Text>
+            {parts.length > 0 ? (
+              <Text style={styles.partsProgress} testID="parts-progress">
+                {parts.filter((p) => p.status === "installed").length}/{parts.length} GIVEN
+              </Text>
+            ) : null}
+          </View>
+
+          <Text style={styles.partsHint}>
+            Tap a status pill to cycle: <Text style={{ color: colors.danger }}>PENDING</Text> → <Text style={{ color: colors.warning }}>ORDERED</Text> → <Text style={{ color: colors.success }}>GIVEN</Text>. Each part is tracked individually.
+          </Text>
 
           {parts.length === 0 ? (
             <Text style={styles.emptyParts}>No parts added yet.</Text>
           ) : (
-            parts.map((p, i) => (
-              <View key={`${p.name}-${i}`} style={styles.partRow} testID={`part-${i}`}>
-                <TouchableOpacity
-                  onPress={() => cyclePartStatus(i)}
-                  style={[
-                    styles.partStatus,
-                    {
-                      borderColor:
-                        p.status === "installed"
+            parts.map((p, i) => {
+              const done = p.status === "installed";
+              return (
+                <View key={`${p.name}-${i}`} style={styles.partRow} testID={`part-${i}`}>
+                  <TouchableOpacity
+                    onPress={() => cyclePartStatus(i)}
+                    style={[
+                      styles.partStatus,
+                      {
+                        borderColor: done
                           ? colors.success
                           : p.status === "ordered"
                           ? colors.warning
                           : colors.danger,
-                    },
-                  ]}
-                  testID={`part-status-${i}`}
-                >
-                  <Text
-                    style={[
-                      styles.partStatusText,
-                      {
-                        color:
-                          p.status === "installed"
+                        backgroundColor: done ? `${colors.success}1F` : "transparent",
+                      },
+                    ]}
+                    testID={`part-status-${i}`}
+                  >
+                    <Ionicons
+                      name={done ? "checkmark-circle" : p.status === "ordered" ? "time" : "ellipse-outline"}
+                      size={14}
+                      color={done ? colors.success : p.status === "ordered" ? colors.warning : colors.danger}
+                    />
+                    <Text
+                      style={[
+                        styles.partStatusText,
+                        {
+                          color: done
                             ? colors.success
                             : p.status === "ordered"
                             ? colors.warning
                             : colors.danger,
-                      },
-                    ]}
+                        },
+                      ]}
+                    >
+                      {done ? "GIVEN" : p.status === "ordered" ? "ORDERED" : "PENDING"}
+                    </Text>
+                  </TouchableOpacity>
+                  <View style={{ flex: 1 }}>
+                    <Text
+                      style={[
+                        styles.partName,
+                        done && { textDecorationLine: "line-through", color: colors.textMuted },
+                      ]}
+                    >
+                      {p.name}
+                    </Text>
+                    <Text style={styles.partMeta}>
+                      QTY {p.quantity}
+                      {p.price !== undefined ? ` · ₹${p.price}` : ""}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => removePart(i)}
+                    hitSlop={10}
+                    testID={`remove-part-${i}`}
                   >
-                    {p.status.toUpperCase()}
-                  </Text>
-                </TouchableOpacity>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.partName}>{p.name}</Text>
-                  <Text style={styles.partMeta}>
-                    QTY {p.quantity}
-                    {p.price !== undefined ? ` · ₹${p.price}` : ""}
-                  </Text>
+                    <Ionicons name="trash-outline" size={18} color={colors.danger} />
+                  </TouchableOpacity>
                 </View>
-                <TouchableOpacity
-                  onPress={() => removePart(i)}
-                  hitSlop={10}
-                  testID={`remove-part-${i}`}
-                >
-                  <Ionicons name="trash-outline" size={18} color={colors.danger} />
-                </TouchableOpacity>
-              </View>
-            ))
+              );
+            })
           )}
 
           <View style={styles.addPartRow}>
@@ -574,6 +599,24 @@ const styles = StyleSheet.create({
   compareInput: { color: colors.text, fontSize: 13, minHeight: 80, textAlignVertical: "top" },
 
   emptyParts: { color: colors.textMuted, fontSize: 13, marginBottom: 10 },
+  partsHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  partsProgress: {
+    color: colors.success,
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 1.4,
+  },
+  partsHint: {
+    color: colors.textDim,
+    fontSize: 11,
+    lineHeight: 16,
+    marginBottom: 12,
+  },
   partRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -586,9 +629,14 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   partStatus: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
     paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingVertical: 6,
     borderWidth: 1,
+    minWidth: 92,
+    justifyContent: "center",
   },
   partStatusText: { fontSize: 9, fontWeight: "900", letterSpacing: 1.2 },
   partName: { color: colors.text, fontWeight: "800", fontSize: 13 },
