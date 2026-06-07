@@ -203,6 +203,20 @@ async def create_job(payload: JobCreate, request: Request):
     user = await get_current_user(request)
     job_id = f"job_{uuid.uuid4().hex[:12]}"
     now = _now_iso()
+    photos_dict = (payload.photos.model_dump() if payload.photos else JobPhotos().model_dump())
+
+    # Safety check: MongoDB hard-limits single docs to 16 MB. Refuse early with a clear message.
+    photos_bytes = sum(len(v or "") for v in photos_dict.values())
+    if photos_bytes > 12_000_000:
+        raise HTTPException(
+            status_code=413,
+            detail=(
+                f"Photos too large ({photos_bytes // 1024 // 1024} MB). "
+                "Re-take photos using the app's camera which auto-compresses, "
+                "or pick a smaller image from gallery."
+            ),
+        )
+
     doc = {
         "job_id": job_id,
         "customer_name": payload.customer_name,
@@ -214,7 +228,7 @@ async def create_job(payload: JobCreate, request: Request):
         "customer_problems": payload.customer_problems,
         "mechanic_findings": None,
         "spare_parts": [],
-        "photos": (payload.photos.model_dump() if payload.photos else JobPhotos().model_dump()),
+        "photos": photos_dict,
         "status": "pending",
         "assigned_mechanic": None,
         "estimated_cost": None,
