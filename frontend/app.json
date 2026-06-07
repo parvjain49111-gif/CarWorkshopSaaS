@@ -34,7 +34,15 @@
           "backgroundColor": "#000"
         }
       ],
-      "expo-font"
+      "expo-font",
+      "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Capture car photos for the workshop intake log.",
+          "cameraPermission": "Snap front, back & side photos of the car."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

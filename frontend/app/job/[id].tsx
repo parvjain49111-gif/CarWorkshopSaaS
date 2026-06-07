@@ -1,0 +1,657 @@
+import { useCallback, useEffect, useState } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  TextInput,
+  Image,
+  ActivityIndicator,
+  ScrollView,
+  Modal,
+} from "react-native";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
+import { useLocalSearchParams, useRouter } from "expo-router";
+
+import { api } from "@/src/lib/api";
+import { useAuth } from "@/src/lib/auth";
+import { colors, statusColor, statusLabel } from "@/src/lib/theme";
+import { StatusPill } from "@/src/components/ui";
+
+type SparePart = {
+  name: string;
+  quantity: number;
+  price?: number;
+  status: "pending" | "ordered" | "installed";
+};
+
+const STATUSES: ("pending" | "in_progress" | "completed")[] = [
+  "pending",
+  "in_progress",
+  "completed",
+];
+
+export default function JobDetailScreen() {
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { user } = useAuth();
+
+  const [job, setJob] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [findings, setFindings] = useState("");
+  const [parts, setParts] = useState<SparePart[]>([]);
+  const [newPartName, setNewPartName] = useState("");
+  const [newPartQty, setNewPartQty] = useState("1");
+  const [newPartPrice, setNewPartPrice] = useState("");
+  const [photoView, setPhotoView] = useState<string | null>(null);
+  const [savingFindings, setSavingFindings] = useState(false);
+  const [savingStatus, setSavingStatus] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 1500);
+  };
+
+  const load = useCallback(async () => {
+    try {
+      const data = await api.getJob(id as string);
+      setJob(data);
+      setFindings(data.mechanic_findings || "");
+      setParts(data.spare_parts || []);
+    } catch (e) {
+      console.warn("load job", e);
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const updateStatus = async (s: "pending" | "in_progress" | "completed") => {
+    if (savingStatus) return;
+    setSavingStatus(s);
+    try {
+      const updated = await api.updateJob(id as string, { status: s });
+      setJob(updated);
+      showToast(`Status → ${statusLabel(s)}`);
+    } catch (e: any) {
+      showToast(e?.message || "Failed");
+    } finally {
+      setSavingStatus(null);
+    }
+  };
+
+  const saveFindings = async () => {
+    if (savingFindings) return;
+    setSavingFindings(true);
+    try {
+      const updated = await api.updateJob(id as string, {
+        mechanic_findings: findings,
+        spare_parts: parts,
+      });
+      setJob(updated);
+      showToast("Saved");
+    } catch (e: any) {
+      showToast(e?.message || "Failed");
+    } finally {
+      setSavingFindings(false);
+    }
+  };
+
+  const addPart = () => {
+    if (!newPartName.trim()) return;
+    setParts((p) => [
+      ...p,
+      {
+        name: newPartName.trim(),
+        quantity: Math.max(1, parseInt(newPartQty || "1", 10)),
+        price: newPartPrice ? parseFloat(newPartPrice) : undefined,
+        status: "pending",
+      },
+    ]);
+    setNewPartName("");
+    setNewPartQty("1");
+    setNewPartPrice("");
+  };
+
+  const removePart = (idx: number) => {
+    setParts((p) => p.filter((_, i) => i !== idx));
+  };
+
+  const cyclePartStatus = (idx: number) => {
+    setParts((p) =>
+      p.map((part, i) => {
+        if (i !== idx) return part;
+        const next =
+          part.status === "pending"
+            ? "ordered"
+            : part.status === "ordered"
+            ? "installed"
+            : "pending";
+        return { ...part, status: next };
+      }),
+    );
+  };
+
+  if (loading) {
+    return (
+      <View style={[styles.root, { alignItems: "center", justifyContent: "center" }]}>
+        <ActivityIndicator color={colors.accent} />
+      </View>
+    );
+  }
+
+  if (!job) {
+    return (
+      <View style={[styles.root, { alignItems: "center", justifyContent: "center" }]}>
+        <Text style={{ color: colors.textDim }}>Job not found</Text>
+      </View>
+    );
+  }
+
+  const photos = job.photos || {};
+  const photoSlots: { key: string; label: string }[] = [
+    { key: "front", label: "FRONT" },
+    { key: "back", label: "BACK" },
+    { key: "left", label: "LEFT" },
+    { key: "right", label: "RIGHT" },
+  ];
+
+  const createdAt = job.created_at
+    ? new Date(job.created_at).toLocaleString()
+    : "";
+
+  return (
+    <SafeAreaView style={styles.root} edges={["top"]} testID="job-detail-screen">
+      <View style={styles.headerBar}>
+        <TouchableOpacity
+          testID="back-button"
+          onPress={() => router.back()}
+          hitSlop={10}
+          style={styles.backBtn}
+        >
+          <Ionicons name="chevron-back" size={22} color={colors.text} />
+        </TouchableOpacity>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.headerEyebrow}>JOB · {job.job_id.slice(-6).toUpperCase()}</Text>
+          <Text style={styles.headerTitle} testID="job-car-number">
+            {job.car_number}
+          </Text>
+        </View>
+        <StatusPill status={job.status} />
+      </View>
+
+      <KeyboardAwareScrollView
+        bottomOffset={20}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
+      >
+        {/* Status switcher */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>STATUS</Text>
+          <View style={styles.statusRow}>
+            {STATUSES.map((s) => {
+              const active = job.status === s;
+              const c = statusColor(s);
+              return (
+                <TouchableOpacity
+                  key={s}
+                  testID={`set-status-${s}`}
+                  onPress={() => updateStatus(s)}
+                  style={[
+                    styles.statusBtn,
+                    {
+                      borderColor: active ? c : colors.border,
+                      backgroundColor: active ? `${c}1F` : colors.surface,
+                    },
+                  ]}
+                  disabled={savingStatus !== null}
+                  activeOpacity={0.85}
+                >
+                  {savingStatus === s ? (
+                    <ActivityIndicator color={c} size="small" />
+                  ) : (
+                    <Text
+                      style={[
+                        styles.statusBtnText,
+                        { color: active ? c : colors.textDim },
+                      ]}
+                    >
+                      {statusLabel(s)}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
+        {/* Vehicle info */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>VEHICLE</Text>
+          <View style={styles.infoCard}>
+            <InfoRow icon="car-sport" label="Model" value={`${job.car_name}${job.model_year ? ` · ${job.model_year}` : ""}`} />
+            <InfoRow icon="finger-print" label="Plate" value={job.car_number} />
+            <InfoRow icon="person" label="Customer" value={job.customer_name} />
+            {job.customer_phone ? (
+              <InfoRow icon="call" label="Phone" value={job.customer_phone} />
+            ) : null}
+            {job.reference ? (
+              <InfoRow icon="people" label="Reference" value={job.reference} />
+            ) : null}
+            <InfoRow icon="time" label="Logged" value={createdAt} />
+          </View>
+        </View>
+
+        {/* Photos */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>PHOTOS</Text>
+          <View style={styles.photoRow}>
+            {photoSlots.map((slot) => (
+              <TouchableOpacity
+                key={slot.key}
+                testID={`photo-${slot.key}`}
+                style={styles.photoBox}
+                disabled={!photos[slot.key]}
+                onPress={() => photos[slot.key] && setPhotoView(photos[slot.key])}
+                activeOpacity={0.85}
+              >
+                {photos[slot.key] ? (
+                  <Image
+                    source={{ uri: photos[slot.key] }}
+                    style={StyleSheet.absoluteFillObject}
+                  />
+                ) : (
+                  <Ionicons name="image-outline" size={24} color={colors.textMuted} />
+                )}
+                <View style={styles.photoTag}>
+                  <Text style={styles.photoTagText}>{slot.label}</Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        {/* Diagnosis comparison */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>DIAGNOSIS — CUSTOMER vs MECHANIC</Text>
+          <View style={styles.compareRow}>
+            <View style={[styles.compareCol, { borderRightWidth: 1, borderColor: colors.border }]}>
+              <Text style={styles.compareLabel}>CUSTOMER SAID</Text>
+              <Text style={styles.compareText} testID="customer-problems">
+                {job.customer_problems || "—"}
+              </Text>
+            </View>
+            <View style={styles.compareCol}>
+              <Text style={[styles.compareLabel, { color: colors.accent }]}>
+                MECHANIC FOUND
+              </Text>
+              <TextInput
+                testID="mechanic-findings-input"
+                multiline
+                value={findings}
+                onChangeText={setFindings}
+                placeholder="Add diagnosis details…"
+                placeholderTextColor={colors.textMuted}
+                style={styles.compareInput}
+              />
+            </View>
+          </View>
+        </View>
+
+        {/* Spare parts */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>SPARE PARTS</Text>
+
+          {parts.length === 0 ? (
+            <Text style={styles.emptyParts}>No parts added yet.</Text>
+          ) : (
+            parts.map((p, i) => (
+              <View key={`${p.name}-${i}`} style={styles.partRow} testID={`part-${i}`}>
+                <TouchableOpacity
+                  onPress={() => cyclePartStatus(i)}
+                  style={[
+                    styles.partStatus,
+                    {
+                      borderColor:
+                        p.status === "installed"
+                          ? colors.success
+                          : p.status === "ordered"
+                          ? colors.warning
+                          : colors.danger,
+                    },
+                  ]}
+                  testID={`part-status-${i}`}
+                >
+                  <Text
+                    style={[
+                      styles.partStatusText,
+                      {
+                        color:
+                          p.status === "installed"
+                            ? colors.success
+                            : p.status === "ordered"
+                            ? colors.warning
+                            : colors.danger,
+                      },
+                    ]}
+                  >
+                    {p.status.toUpperCase()}
+                  </Text>
+                </TouchableOpacity>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.partName}>{p.name}</Text>
+                  <Text style={styles.partMeta}>
+                    QTY {p.quantity}
+                    {p.price !== undefined ? ` · ₹${p.price}` : ""}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => removePart(i)}
+                  hitSlop={10}
+                  testID={`remove-part-${i}`}
+                >
+                  <Ionicons name="trash-outline" size={18} color={colors.danger} />
+                </TouchableOpacity>
+              </View>
+            ))
+          )}
+
+          <View style={styles.addPartRow}>
+            <TextInput
+              testID="part-name-input"
+              value={newPartName}
+              onChangeText={setNewPartName}
+              placeholder="Part name"
+              placeholderTextColor={colors.textMuted}
+              style={[styles.partInput, { flex: 2 }]}
+            />
+            <TextInput
+              testID="part-qty-input"
+              value={newPartQty}
+              onChangeText={setNewPartQty}
+              placeholder="Qty"
+              keyboardType="numeric"
+              placeholderTextColor={colors.textMuted}
+              style={[styles.partInput, { width: 56 }]}
+            />
+            <TextInput
+              testID="part-price-input"
+              value={newPartPrice}
+              onChangeText={setNewPartPrice}
+              placeholder="₹"
+              keyboardType="numeric"
+              placeholderTextColor={colors.textMuted}
+              style={[styles.partInput, { width: 70 }]}
+            />
+            <TouchableOpacity
+              onPress={addPart}
+              style={styles.addPartBtn}
+              testID="add-part-button"
+            >
+              <Ionicons name="add" size={20} color="#000" />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <TouchableOpacity
+          testID="save-findings"
+          onPress={saveFindings}
+          disabled={savingFindings}
+          style={[styles.saveBtn, savingFindings && { opacity: 0.6 }]}
+          activeOpacity={0.85}
+        >
+          {savingFindings ? (
+            <ActivityIndicator color="#000" />
+          ) : (
+            <>
+              <Ionicons name="save" size={18} color="#000" />
+              <Text style={styles.saveBtnText}>SAVE FINDINGS & PARTS</Text>
+            </>
+          )}
+        </TouchableOpacity>
+      </KeyboardAwareScrollView>
+
+      <Modal
+        transparent
+        visible={!!photoView}
+        animationType="fade"
+        onRequestClose={() => setPhotoView(null)}
+      >
+        <TouchableOpacity
+          activeOpacity={1}
+          onPress={() => setPhotoView(null)}
+          style={styles.photoModal}
+        >
+          {photoView ? (
+            <Image source={{ uri: photoView }} style={styles.fullPhoto} resizeMode="contain" />
+          ) : null}
+          <View style={[styles.closeBadge, { top: insets.top + 16 }]}>
+            <Ionicons name="close" size={22} color={colors.text} />
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {toast ? (
+        <View style={[styles.toast, { bottom: insets.bottom + 30 }]} testID="toast">
+          <Ionicons name="checkmark-circle" size={16} color={colors.success} />
+          <Text style={styles.toastText}>{toast}</Text>
+        </View>
+      ) : null}
+    </SafeAreaView>
+  );
+}
+
+function InfoRow({ icon, label, value }: any) {
+  return (
+    <View style={styles.infoRow}>
+      <Ionicons name={icon} size={14} color={colors.accent} />
+      <Text style={styles.infoLabel}>{label}</Text>
+      <Text style={styles.infoValue} numberOfLines={2}>
+        {value}
+      </Text>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: colors.bg },
+  headerBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 8,
+    borderBottomWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.bg,
+  },
+  backBtn: {
+    width: 36,
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  headerEyebrow: {
+    color: colors.textMuted,
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 1.5,
+  },
+  headerTitle: {
+    color: colors.text,
+    fontSize: 20,
+    fontWeight: "900",
+    letterSpacing: 1,
+  },
+
+  section: { paddingHorizontal: 20, marginTop: 22 },
+  sectionTitle: {
+    color: colors.textDim,
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 2,
+    marginBottom: 10,
+  },
+
+  statusRow: { flexDirection: "row", gap: 8 },
+  statusBtn: {
+    flex: 1,
+    borderWidth: 1,
+    paddingVertical: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 42,
+  },
+  statusBtnText: { fontSize: 11, fontWeight: "900", letterSpacing: 1.4 },
+
+  infoCard: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  infoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderBottomWidth: 1,
+    borderColor: colors.border,
+  },
+  infoLabel: { color: colors.textMuted, fontSize: 12, width: 84 },
+  infoValue: { color: colors.text, fontSize: 13, flex: 1, fontWeight: "700" },
+
+  photoRow: { flexDirection: "row", gap: 8 },
+  photoBox: {
+    flex: 1,
+    aspectRatio: 1,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  photoTag: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: "rgba(0,0,0,0.7)",
+    paddingVertical: 4,
+  },
+  photoTagText: {
+    color: colors.text,
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 1.2,
+    textAlign: "center",
+  },
+
+  compareRow: {
+    flexDirection: "row",
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  compareCol: { flex: 1, padding: 12, minHeight: 130 },
+  compareLabel: {
+    color: colors.textMuted,
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 1.5,
+    marginBottom: 8,
+  },
+  compareText: { color: colors.text, fontSize: 13, lineHeight: 18 },
+  compareInput: { color: colors.text, fontSize: 13, minHeight: 80, textAlignVertical: "top" },
+
+  emptyParts: { color: colors.textMuted, fontSize: 13, marginBottom: 10 },
+  partRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    marginBottom: 8,
+  },
+  partStatus: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderWidth: 1,
+  },
+  partStatusText: { fontSize: 9, fontWeight: "900", letterSpacing: 1.2 },
+  partName: { color: colors.text, fontWeight: "800", fontSize: 13 },
+  partMeta: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
+  addPartRow: { flexDirection: "row", gap: 6, marginTop: 8 },
+  partInput: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    color: colors.text,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    fontSize: 13,
+  },
+  addPartBtn: {
+    width: 42,
+    backgroundColor: colors.accent,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  saveBtn: {
+    backgroundColor: colors.accent,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    paddingVertical: 16,
+    marginHorizontal: 20,
+    marginTop: 22,
+  },
+  saveBtnText: { color: "#000", fontWeight: "900", letterSpacing: 2 },
+
+  photoModal: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.95)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  fullPhoto: { width: "100%", height: "100%" },
+  closeBadge: {
+    position: "absolute",
+    right: 16,
+    width: 36,
+    height: 36,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  toast: {
+    position: "absolute",
+    alignSelf: "center",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  toastText: { color: colors.text, fontWeight: "800", fontSize: 12, letterSpacing: 1 },
+});
