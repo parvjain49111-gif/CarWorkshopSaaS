@@ -18,17 +18,12 @@ export default function ProfileScreen() {
     const res = await downloadJobsCsv();
     setDownloading(false);
     if (res.ok) {
-      setToast(
-        res.where === "browser"
-          ? "CSV downloaded"
-          : res.where === "share"
-          ? "Opened share sheet"
-          : "Saved to device",
-      );
+      setToast(res.message);
+      setTimeout(() => setToast(null), 5000);
     } else {
-      setToast(res.error);
+      setToast(`Failed: ${res.error}`);
+      setTimeout(() => setToast(null), 4000);
     }
-    setTimeout(() => setToast(null), 2000);
   };
 
   return (
@@ -221,15 +216,22 @@ const styles = StyleSheet.create({
   toast: {
     position: "absolute",
     bottom: 100,
-    alignSelf: "center",
+    left: 20,
+    right: 20,
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
     backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    borderColor: colors.accent,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
   },
-  toastText: { color: colors.text, fontWeight: "800", fontSize: 12, letterSpacing: 1 },
+  toastText: {
+    color: colors.text,
+    fontWeight: "700",
+    fontSize: 12,
+    letterSpacing: 0.5,
+    flex: 1,
+  },
 });

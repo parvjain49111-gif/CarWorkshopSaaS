@@ -14,36 +14,53 @@ async function getToken(): Promise<string> {
   return (t as string) || "";
 }
 
-export async function downloadJobsCsv(): Promise<
-  { ok: true; where: "browser" | "share" | "saved"; path?: string } | { ok: false; error: string }
-> {
+export type ExportResult =
+  | { ok: true; message: string; rows?: number; bytes?: number }
+  | { ok: false; error: string };
+
+export async function downloadJobsCsv(): Promise<ExportResult> {
   try {
     const token = await getToken();
+    if (!token) return { ok: false, error: "Not signed in" };
+
     const url = `${BASE_URL}/api/jobs/export.csv`;
     const filename = `workshop_jobs_${new Date()
       .toISOString()
+      .slice(0, 19)
       .replace(/[:.]/g, "-")}.csv`;
 
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) {
+      return { ok: false, error: `Server returned ${res.status}` };
+    }
+    const text = await res.text();
+    const rows = Math.max(0, text.split("\n").filter((l) => l.trim()).length - 1);
+    const bytes = new Blob([text]).size;
+
     if (Platform.OS === "web") {
-      const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const blob = await res.blob();
+      const blob = new Blob([text], { type: "text/csv;charset=utf-8;" });
       const dlUrl = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = dlUrl;
       a.download = filename;
+      a.style.display = "none";
       document.body.appendChild(a);
       a.click();
-      a.remove();
-      URL.revokeObjectURL(dlUrl);
-      return { ok: true, where: "browser" };
+      setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(dlUrl);
+      }, 200);
+      return {
+        ok: true,
+        message: `Downloaded ${filename} · ${rows} rows · check your Downloads folder`,
+        rows,
+        bytes,
+      };
     }
 
-    // Native: fetch as text, write file to cache, then share.
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const text = await res.text();
-
+    // Native: write to cache + share sheet
     const file = new File(Paths.cache, filename);
     if (file.exists) file.delete();
     file.create();
@@ -56,9 +73,19 @@ export async function downloadJobsCsv(): Promise<
         dialogTitle: "Workshop Jobs CSV",
         UTI: "public.comma-separated-values-text",
       });
-      return { ok: true, where: "share", path: file.uri };
+      return {
+        ok: true,
+        message: `${rows} rows shared · save it to Files, Drive, WhatsApp or email`,
+        rows,
+        bytes,
+      };
     }
-    return { ok: true, where: "saved", path: file.uri };
+    return {
+      ok: true,
+      message: `Saved to ${file.uri}`,
+      rows,
+      bytes,
+    };
   } catch (e: any) {
     return { ok: false, error: e?.message || "Download failed" };
   }

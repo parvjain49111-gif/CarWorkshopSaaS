@@ -8,8 +8,7 @@ import {
   TouchableOpacity,
   RefreshControl,
   ActivityIndicator,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+} from "react-native";import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
 
@@ -49,6 +48,28 @@ export default function JobsScreen() {
       setRefreshing(false);
     }
   }, [q, status]);
+
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+
+  const quickStatus = async (
+    job: any,
+    next: "pending" | "in_progress" | "completed",
+  ) => {
+    if (job.status === next || updatingId) return;
+    setUpdatingId(job.job_id);
+    try {
+      const updated = await api.updateJob(job.job_id, { status: next });
+      setJobs((prev) => prev.map((j) => (j.job_id === job.job_id ? updated : j)));
+      setToast(`${job.car_number} → ${next.replace("_", " ").toUpperCase()}`);
+      setTimeout(() => setToast(null), 1400);
+    } catch (e: any) {
+      setToast(e?.message || "Failed");
+      setTimeout(() => setToast(null), 1800);
+    } finally {
+      setUpdatingId(null);
+    }
+  };
 
   useEffect(() => {
     setLoading(true);
@@ -159,51 +180,97 @@ export default function JobsScreen() {
             />
           }
           renderItem={({ item }) => (
-            <TouchableOpacity
-              testID={`job-row-${item.job_id}`}
-              style={styles.row}
-              activeOpacity={0.85}
-              onPress={() => router.push(`/job/${item.job_id}`)}
-            >
+            <View style={styles.row} testID={`job-row-${item.job_id}`}>
               <View
                 style={[
                   styles.rowAccent,
                   { backgroundColor: statusColor(item.status) },
                 ]}
               />
-              <View style={{ flex: 1, padding: 14 }}>
-                <View style={styles.rowTop}>
-                  <Text style={styles.rowPlate}>{item.car_number}</Text>
-                  <StatusPill status={item.status} />
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={() => router.push(`/job/${item.job_id}`)}
+                style={{ flex: 1 }}
+              >
+                <View style={{ padding: 14 }}>
+                  <View style={styles.rowTop}>
+                    <Text style={styles.rowPlate}>{item.car_number}</Text>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                      <StatusPill status={item.status} />
+                      <Ionicons name="chevron-forward" size={14} color={colors.textMuted} />
+                    </View>
+                  </View>
+                  <Text style={styles.rowCar} numberOfLines={1}>
+                    {item.car_name}
+                    {item.model_year ? ` · ${item.model_year}` : ""}
+                  </Text>
+                  <View style={styles.rowMeta}>
+                    <Ionicons name="person-outline" size={12} color={colors.textMuted} />
+                    <Text style={styles.rowMetaText}>{item.customer_name}</Text>
+                    {item.reference ? (
+                      <>
+                        <View style={styles.metaDivider} />
+                        <Ionicons name="people-outline" size={12} color={colors.textMuted} />
+                        <Text style={styles.rowMetaText} numberOfLines={1}>
+                          {item.reference}
+                        </Text>
+                      </>
+                    ) : null}
+                  </View>
                 </View>
-                <Text style={styles.rowCar} numberOfLines={1}>
-                  {item.car_name}
-                  {item.model_year ? ` · ${item.model_year}` : ""}
-                </Text>
-                <View style={styles.rowMeta}>
-                  <Ionicons name="person-outline" size={12} color={colors.textMuted} />
-                  <Text style={styles.rowMetaText}>{item.customer_name}</Text>
-                  {item.reference ? (
-                    <>
-                      <View style={styles.metaDivider} />
-                      <Ionicons name="people-outline" size={12} color={colors.textMuted} />
-                      <Text style={styles.rowMetaText} numberOfLines={1}>
-                        {item.reference}
-                      </Text>
-                    </>
-                  ) : null}
+
+                {/* Quick status switcher */}
+                <View style={styles.quickRow}>
+                  {(["pending", "in_progress", "completed"] as const).map((s) => {
+                    const active = item.status === s;
+                    const c = statusColor(s);
+                    return (
+                      <TouchableOpacity
+                        key={s}
+                        testID={`quick-${s}-${item.job_id}`}
+                        onPress={() => quickStatus(item, s)}
+                        disabled={updatingId === item.job_id}
+                        activeOpacity={0.8}
+                        style={[
+                          styles.quickBtn,
+                          {
+                            borderColor: active ? c : colors.border,
+                            backgroundColor: active ? `${c}1F` : "transparent",
+                          },
+                        ]}
+                      >
+                        {updatingId === item.job_id && active ? (
+                          <ActivityIndicator size="small" color={c} />
+                        ) : (
+                          <Text
+                            style={[
+                              styles.quickBtnText,
+                              { color: active ? c : colors.textDim },
+                            ]}
+                          >
+                            {s === "in_progress"
+                              ? "WORKING"
+                              : s === "completed"
+                              ? "DONE"
+                              : "PENDING"}
+                          </Text>
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
                 </View>
-              </View>
-              <Ionicons
-                name="chevron-forward"
-                size={18}
-                color={colors.textMuted}
-                style={{ alignSelf: "center", marginRight: 12 }}
-              />
-            </TouchableOpacity>
+              </TouchableOpacity>
+            </View>
           )}
         />
       )}
+
+      {toast ? (
+        <View style={styles.toast} testID="jobs-toast">
+          <Ionicons name="checkmark-circle" size={16} color={colors.accent} />
+          <Text style={styles.toastText}>{toast}</Text>
+        </View>
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -274,4 +341,35 @@ const styles = StyleSheet.create({
   rowMeta: { flexDirection: "row", alignItems: "center", gap: 5 },
   rowMetaText: { color: colors.textMuted, fontSize: 12 },
   metaDivider: { width: 1, height: 12, backgroundColor: colors.border, marginHorizontal: 6 },
+  quickRow: {
+    flexDirection: "row",
+    borderTopWidth: 1,
+    borderColor: colors.border,
+    gap: 1,
+    backgroundColor: colors.border,
+  },
+  quickBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    backgroundColor: colors.surface,
+    minHeight: 38,
+  },
+  quickBtnText: { fontSize: 10, fontWeight: "900", letterSpacing: 1.3 },
+  toast: {
+    position: "absolute",
+    bottom: 90,
+    alignSelf: "center",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  toastText: { color: colors.text, fontWeight: "800", fontSize: 12, letterSpacing: 1 },
 });

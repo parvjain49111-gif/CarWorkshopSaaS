@@ -538,6 +538,45 @@ async def get_analytics(request: Request):
         reverse=True,
     )[:6]
 
+    # ----- Employee performance (who logged what)
+    user_ids = list({j.get("created_by") for j in jobs if j.get("created_by")})
+    name_map: dict = {}
+    if user_ids:
+        async for u in db.users.find({"user_id": {"$in": user_ids}}, {"_id": 0, "user_id": 1, "name": 1, "email": 1, "role": 1}):
+            name_map[u["user_id"]] = {
+                "name": u.get("name") or u.get("email") or u["user_id"],
+                "role": u.get("role", "mechanic"),
+            }
+    emp_counts: dict = {}
+    for j in jobs:
+        uid = j.get("created_by")
+        if not uid:
+            continue
+        d = emp_counts.setdefault(uid, {"intake": 0, "pending": 0, "in_progress": 0, "completed": 0, "today": 0, "week": 0, "month": 0})
+        d["intake"] += 1
+        s = j.get("status") or "pending"
+        if s in ("pending", "in_progress", "completed"):
+            d[s] += 1
+        cdt = parse_dt(j.get("created_at", ""))
+        if cdt:
+            delta = (now - cdt).days
+            if delta < 1:
+                d["today"] += 1
+            if delta <= 7:
+                d["week"] += 1
+            if delta <= 30:
+                d["month"] += 1
+    employees = []
+    for uid, d in emp_counts.items():
+        info = name_map.get(uid, {"name": uid, "role": "mechanic"})
+        employees.append({
+            "user_id": uid,
+            "name": info["name"],
+            "role": info["role"],
+            **d,
+        })
+    employees.sort(key=lambda x: x["intake"], reverse=True)
+
     return {
         "total_jobs": len(jobs),
         "status_counts": status_counts,
@@ -554,6 +593,7 @@ async def get_analytics(request: Request):
         "completed_count": status_counts.get("completed", 0),
         "top_customers": top_customers,
         "mechanics": mechanics,
+        "employees": employees,
         "unique_customers": len({(j.get("customer_name") or "").strip() for j in jobs if j.get("customer_name")}),
     }
 

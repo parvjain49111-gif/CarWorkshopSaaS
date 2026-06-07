@@ -15,6 +15,19 @@ import { api } from "@/src/lib/api";
 import { colors } from "@/src/lib/theme";
 
 type Row = { label: string; count: number };
+type Employee = {
+  user_id: string;
+  name: string;
+  role: string;
+  intake: number;
+  pending: number;
+  in_progress: number;
+  completed: number;
+  today: number;
+  week: number;
+  month: number;
+};
+
 type Analytics = {
   total_jobs: number;
   status_counts: { pending: number; in_progress: number; completed: number };
@@ -31,6 +44,7 @@ type Analytics = {
   completed_count: number;
   top_customers: Row[];
   mechanics: Row[];
+  employees: Employee[];
   unique_customers: number;
 };
 
@@ -166,6 +180,73 @@ export default function AnalyticsScreen() {
               </View>
             </View>
 
+            {/* Employee Performance */}
+            <SectionHeader title="EMPLOYEE PERFORMANCE · LIVE" />
+            {!data.employees || data.employees.length === 0 ? (
+              <EmptyHint text="No team activity yet. Once your mechanics start logging intakes, they appear here." />
+            ) : (
+              data.employees.map((emp) => (
+                <View key={emp.user_id} style={styles.empCard} testID={`emp-${emp.user_id}`}>
+                  <View style={styles.empHead}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.empName} numberOfLines={1}>
+                        {emp.name}
+                      </Text>
+                      <View style={styles.empRoleRow}>
+                        <View
+                          style={[
+                            styles.empRoleBadge,
+                            {
+                              borderColor:
+                                emp.role === "owner" ? colors.accent : colors.success,
+                            },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.empRoleText,
+                              {
+                                color:
+                                  emp.role === "owner" ? colors.accent : colors.success,
+                              },
+                            ]}
+                          >
+                            {emp.role.toUpperCase()}
+                          </Text>
+                        </View>
+                        <Text style={styles.empTotal}>{emp.intake} total intakes</Text>
+                      </View>
+                    </View>
+                  </View>
+                  <View style={styles.empStatGrid}>
+                    <EmpStat label="TODAY" value={emp.today} color={colors.accent} />
+                    <EmpStat label="WEEK" value={emp.week} color={colors.text} />
+                    <EmpStat label="MONTH" value={emp.month} color={colors.textDim} />
+                  </View>
+                  <View style={styles.empBarRow}>
+                    <EmpBar
+                      count={emp.pending}
+                      total={emp.intake}
+                      color={colors.danger}
+                      label="PEND"
+                    />
+                    <EmpBar
+                      count={emp.in_progress}
+                      total={emp.intake}
+                      color={colors.warning}
+                      label="WIP"
+                    />
+                    <EmpBar
+                      count={emp.completed}
+                      total={emp.intake}
+                      color={colors.success}
+                      label="DONE"
+                    />
+                  </View>
+                </View>
+              ))
+            )}
+
             {/* Brands */}
             <SectionHeader title="TOP BRANDS · BY VOLUME" />
             <BarList
@@ -229,6 +310,40 @@ export default function AnalyticsScreen() {
         )}
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+function EmpStat({ label, value, color }: { label: string; value: number; color: string }) {
+  return (
+    <View style={styles.empStat}>
+      <Text style={[styles.empStatValue, { color }]}>{value}</Text>
+      <Text style={styles.empStatLabel}>{label}</Text>
+    </View>
+  );
+}
+
+function EmpBar({
+  count,
+  total,
+  color,
+  label,
+}: {
+  count: number;
+  total: number;
+  color: string;
+  label: string;
+}) {
+  const pct = total > 0 ? Math.max(2, Math.round((count / total) * 100)) : 0;
+  return (
+    <View style={{ flex: 1 }}>
+      <View style={styles.empBarHead}>
+        <Text style={[styles.empBarLabel, { color }]}>{label}</Text>
+        <Text style={styles.empBarCount}>{count}</Text>
+      </View>
+      <View style={styles.empBarTrack}>
+        <View style={[styles.empBarFill, { width: `${pct}%`, backgroundColor: color }]} />
+      </View>
+    </View>
   );
 }
 
@@ -526,4 +641,53 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 28,
   },
+
+  empCard: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 14,
+    marginBottom: 10,
+  },
+  empHead: { flexDirection: "row", alignItems: "center", gap: 10 },
+  empName: { color: colors.text, fontSize: 15, fontWeight: "900", letterSpacing: 0.3 },
+  empRoleRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 6 },
+  empRoleBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderWidth: 1,
+  },
+  empRoleText: { fontSize: 9, fontWeight: "900", letterSpacing: 1.2 },
+  empTotal: { color: colors.textDim, fontSize: 11, fontWeight: "700" },
+  empStatGrid: {
+    flexDirection: "row",
+    marginTop: 14,
+    marginBottom: 12,
+    gap: 12,
+  },
+  empStat: { flex: 1 },
+  empStatValue: { fontSize: 22, fontWeight: "900", letterSpacing: -0.5 },
+  empStatLabel: {
+    color: colors.textMuted,
+    fontSize: 9,
+    fontWeight: "800",
+    letterSpacing: 1.2,
+    marginTop: 2,
+  },
+  empBarRow: { flexDirection: "row", gap: 8 },
+  empBarHead: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  empBarLabel: { fontSize: 9, fontWeight: "900", letterSpacing: 1.2 },
+  empBarCount: { color: colors.text, fontSize: 11, fontWeight: "900" },
+  empBarTrack: {
+    height: 6,
+    backgroundColor: colors.bg,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  empBarFill: { height: "100%" },
 });
