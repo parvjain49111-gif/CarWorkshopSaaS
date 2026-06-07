@@ -1,12 +1,35 @@
-import { View, Text, StyleSheet, TouchableOpacity, Image } from "react-native";
+import { useState } from "react";
+import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 
 import { useAuth } from "@/src/lib/auth";
 import { colors } from "@/src/lib/theme";
+import { downloadJobsCsv } from "@/src/lib/export";
 
 export default function ProfileScreen() {
   const { user, logout } = useAuth();
+  const [downloading, setDownloading] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+
+  const onExport = async () => {
+    if (downloading) return;
+    setDownloading(true);
+    const res = await downloadJobsCsv();
+    setDownloading(false);
+    if (res.ok) {
+      setToast(
+        res.where === "browser"
+          ? "CSV downloaded"
+          : res.where === "share"
+          ? "Opened share sheet"
+          : "Saved to device",
+      );
+    } else {
+      setToast(res.error);
+    }
+    setTimeout(() => setToast(null), 2000);
+  };
 
   return (
     <SafeAreaView style={styles.root} edges={["top"]} testID="profile-screen">
@@ -56,6 +79,27 @@ export default function ProfileScreen() {
       </View>
 
       <TouchableOpacity
+        testID="export-csv-button"
+        activeOpacity={0.85}
+        onPress={onExport}
+        disabled={downloading}
+        style={[styles.exportBtn, downloading && { opacity: 0.6 }]}
+      >
+        {downloading ? (
+          <ActivityIndicator color="#000" />
+        ) : (
+          <>
+            <Ionicons name="download-outline" size={18} color="#000" />
+            <Text style={styles.exportText}>EXPORT DATA · CSV</Text>
+          </>
+        )}
+      </TouchableOpacity>
+
+      <Text style={styles.exportHint}>
+        Downloads every job (customer, car, problems, mechanic findings, parts, status, dates) as one CSV ready for Excel, Google Sheets, or Python/pandas analysis. Photos are flagged (yes/no) but not embedded.
+      </Text>
+
+      <TouchableOpacity
         testID="logout-button"
         activeOpacity={0.85}
         onPress={logout}
@@ -66,6 +110,13 @@ export default function ProfileScreen() {
       </TouchableOpacity>
 
       <Text style={styles.footer}>WorkshopOps · v1.0</Text>
+
+      {toast ? (
+        <View style={styles.toast} testID="profile-toast">
+          <Ionicons name="information-circle" size={16} color={colors.accent} />
+          <Text style={styles.toastText}>{toast}</Text>
+        </View>
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -135,12 +186,30 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    marginTop: 28,
+    marginTop: 12,
     paddingVertical: 14,
     borderWidth: 1,
     borderColor: colors.danger,
   },
   logoutText: { color: colors.danger, fontWeight: "900", letterSpacing: 2 },
+
+  exportBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    marginTop: 28,
+    paddingVertical: 16,
+    backgroundColor: colors.accent,
+  },
+  exportText: { color: "#000", fontWeight: "900", letterSpacing: 2, fontSize: 13 },
+  exportHint: {
+    color: colors.textMuted,
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 10,
+    textAlign: "center",
+  },
 
   footer: {
     color: colors.textMuted,
@@ -149,4 +218,18 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 24,
   },
+  toast: {
+    position: "absolute",
+    bottom: 100,
+    alignSelf: "center",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  toastText: { color: colors.text, fontWeight: "800", fontSize: 12, letterSpacing: 1 },
 });

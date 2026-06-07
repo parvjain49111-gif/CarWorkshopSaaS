@@ -1,8 +1,11 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Request, Query
+from fastapi.responses import Response
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
+import io
+import csv
 import logging
 import uuid
 import httpx
@@ -253,6 +256,80 @@ async def list_jobs(
     cursor = db.jobs.find(query, {"_id": 0}).sort("created_at", -1).limit(limit)
     items = await cursor.to_list(length=limit)
     return [Job(**i) for i in items]
+
+
+@api_router.get("/jobs/export.csv")
+async def export_jobs_csv(
+    request: Request,
+    status: Optional[str] = Query(None),
+    q: Optional[str] = Query(None),
+):
+    """Export all jobs as CSV (photos excluded, only flagged)."""
+    await get_current_user(request)
+    query: dict = {}
+    if status and status != "all":
+        query["status"] = status
+    if q:
+        query["$or"] = [
+            {"car_number": {"$regex": q, "$options": "i"}},
+            {"customer_name": {"$regex": q, "$options": "i"}},
+            {"car_name": {"$regex": q, "$options": "i"}},
+        ]
+    rows = await db.jobs.find(query, {"_id": 0}).sort("created_at", -1).to_list(length=10000)
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow([
+        "job_id", "created_at", "updated_at", "status",
+        "customer_name", "customer_phone", "reference",
+        "car_name", "car_number", "model_year",
+        "customer_problems", "mechanic_findings",
+        "spare_parts_count", "spare_parts_total_price",
+        "spare_parts_detail",
+        "photos_count", "photo_front", "photo_back", "photo_left", "photo_right",
+    ])
+    for r in rows:
+        parts = r.get("spare_parts") or []
+        total_price = sum(
+            (p.get("price") or 0) * (p.get("quantity") or 1) for p in parts
+        )
+        parts_detail = " | ".join(
+            f"{p.get('name')} x{p.get('quantity',1)} ({p.get('status','pending')})"
+            for p in parts
+        )
+        photos = r.get("photos") or {}
+        photo_keys = ["front", "back", "left", "right"]
+        photos_count = sum(1 for k in photo_keys if photos.get(k))
+        writer.writerow([
+            r.get("job_id", ""),
+            r.get("created_at", ""),
+            r.get("updated_at", ""),
+            r.get("status", ""),
+            r.get("customer_name", ""),
+            r.get("customer_phone", "") or "",
+            r.get("reference", "") or "",
+            r.get("car_name", ""),
+            r.get("car_number", ""),
+            r.get("model_year", "") or "",
+            r.get("customer_problems", "") or "",
+            r.get("mechanic_findings", "") or "",
+            len(parts),
+            f"{total_price:.2f}" if total_price else "",
+            parts_detail,
+            photos_count,
+            "yes" if photos.get("front") else "",
+            "yes" if photos.get("back") else "",
+            "yes" if photos.get("left") else "",
+            "yes" if photos.get("right") else "",
+        ])
+
+    csv_bytes = buf.getvalue().encode("utf-8")
+    filename = f"workshop_jobs_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.csv"
+    return Response(
+        content=csv_bytes,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @api_router.get("/jobs/{job_id}", response_model=Job)

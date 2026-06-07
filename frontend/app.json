@@ -44,6 +44,11 @@
         }
       ]
     ],
+    "extra": {
+      "EXPO_PUBLIC_BACKEND_URL": "https://car-repair-log-4.preview.emergentagent.com",
+      "BACKEND_URL": "https://b25210db-cf9a-4eb8-8147-daf925b6445e.preview.emergentagent.com",
+      "router": {}
+    },
     "experiments": {
       "typedRoutes": true
     }
