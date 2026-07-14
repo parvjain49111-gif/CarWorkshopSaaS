@@ -69,11 +69,20 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="customers"
+        options={{
+          title: "CRM",
+          tabBarIcon: ({ color }) => (
+            <Ionicons name="people" size={22} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="profile"
         options={{
-          title: "PROFILE",
+          title: "MORE",
           tabBarIcon: ({ color }) => (
-            <Ionicons name="person-circle-outline" size={24} color={color} />
+            <Ionicons name="menu" size={24} color={color} />
           ),
         }}
       />

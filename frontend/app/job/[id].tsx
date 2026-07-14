@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   ScrollView,
   Modal,
+  Platform,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -17,8 +18,9 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 
 import { api } from "@/src/lib/api";
 import { useAuth } from "@/src/lib/auth";
-import { colors, statusColor, statusLabel } from "@/src/lib/theme";
+import { colors, statusColor, statusLabel, statusShort, STATUS_META, PAYMENT_META } from "@/src/lib/theme";
 import { StatusPill } from "@/src/components/ui";
+import { storage } from "@/src/utils/storage";
 
 type SparePart = {
   name: string;
@@ -27,11 +29,51 @@ type SparePart = {
   status: "pending" | "ordered" | "installed";
 };
 
-const STATUSES: ("pending" | "in_progress" | "completed")[] = [
-  "pending",
-  "in_progress",
-  "completed",
-];
+type StatusHistoryEntry = {
+  status: string;
+  changed_at: string;
+  changed_by: string;
+  changed_by_name?: string | null;
+  note?: string | null;
+};
+
+type Job = {
+  job_id: string;
+  job_card_no?: string | null;
+  car_number: string;
+  car_name: string;
+  model_year?: string | null;
+  odometer_km?: number | null;
+  customer_name?: string | null;
+  customer_phone?: string | null;
+  reference?: string | null;
+  status: string;
+  status_history?: StatusHistoryEntry[];
+  mechanic_findings?: string | null;
+  spare_parts: SparePart[];
+  photos: { front?: string | null; back?: string | null; left?: string | null; right?: string | null };
+  labour_charges?: number;
+  discount?: number;
+  gst_rate?: number;
+  gst_amount?: number;
+  parts_total?: number;
+  total_amount?: number;
+  payment_status?: "unpaid" | "partial" | "paid";
+  assigned_mechanic?: string | null;
+  assigned_service_advisor?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+const STATUSES = [
+  "vehicle_received",
+  "inspection",
+  "approval_pending",
+  "repair_started",
+  "quality_check",
+  "ready_for_delivery",
+  "delivered",
+] as const;
 
 export default function JobDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -39,7 +81,7 @@ export default function JobDetailScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
 
-  const [job, setJob] = useState<any>(null);
+  const [job, setJob] = useState<Job | null>(null);
   const [loading, setLoading] = useState(true);
   const [findings, setFindings] = useState("");
   const [parts, setParts] = useState<SparePart[]>([]);
@@ -50,6 +92,13 @@ export default function JobDetailScreen() {
   const [savingFindings, setSavingFindings] = useState(false);
   const [savingStatus, setSavingStatus] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+
+  // Billing fields
+  const [labour, setLabour] = useState("0");
+  const [discount, setDiscount] = useState("0");
+  const [gstRate, setGstRate] = useState("18");
+  const [savingBilling, setSavingBilling] = useState(false);
+  const [downloadingInvoice, setDownloadingInvoice] = useState(false);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -62,6 +111,9 @@ export default function JobDetailScreen() {
       setJob(data);
       setFindings(data.mechanic_findings || "");
       setParts(data.spare_parts || []);
+      setLabour(String(data.labour_charges ?? 0));
+      setDiscount(String(data.discount ?? 0));
+      setGstRate(String(data.gst_rate ?? 18));
     } catch (e) {
       console.warn("load job", e);
     } finally {
@@ -101,6 +153,67 @@ export default function JobDetailScreen() {
       showToast(e?.message || "Failed");
     } finally {
       setSavingFindings(false);
+    }
+  };
+
+  const saveBilling = async () => {
+    if (savingBilling) return;
+    setSavingBilling(true);
+    try {
+      const updated = await api.updateJob(id as string, {
+        labour_charges: parseFloat(labour || "0"),
+        discount: parseFloat(discount || "0"),
+        gst_rate: parseFloat(gstRate || "0"),
+      });
+      setJob(updated);
+      showToast("Billing saved");
+    } catch (e: any) {
+      showToast(e?.message || "Failed");
+    } finally {
+      setSavingBilling(false);
+    }
+  };
+
+  const setPaymentStatus = async (ps: "unpaid" | "partial" | "paid") => {
+    if (savingBilling) return;
+    setSavingBilling(true);
+    try {
+      const updated = await api.updateJob(id as string, { payment_status: ps });
+      setJob(updated);
+      showToast(`Payment: ${ps.toUpperCase()}`);
+    } catch (e: any) {
+      showToast(e?.message || "Failed");
+    } finally {
+      setSavingBilling(false);
+    }
+  };
+
+  const downloadInvoice = async () => {
+    if (downloadingInvoice) return;
+    setDownloadingInvoice(true);
+    try {
+      const base = process.env.EXPO_PUBLIC_BACKEND_URL || "";
+      const raw = Platform.OS === "web"
+        ? await storage.getItem<string>("workshop_session_token", "")
+        : await storage.secureGet<string>("workshop_session_token", "");
+      const token = (raw as string) || "";
+      const res = await fetch(`${base}/api/jobs/${id}/invoice.pdf`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      if (Platform.OS === "web") {
+        const url = URL.createObjectURL(blob);
+        window.open(url, "_blank");
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+        showToast("Invoice opened in new tab");
+      } else {
+        showToast("PDF ready — save via share sheet");
+      }
+    } catch (e: any) {
+      showToast(e?.message || "Invoice failed");
+    } finally {
+      setDownloadingInvoice(false);
     }
   };
 
@@ -191,13 +304,18 @@ export default function JobDetailScreen() {
         bottomOffset={20}
         contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
       >
-        {/* Status switcher */}
+        {/* Status switcher — 7 states */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>STATUS</Text>
-          <View style={styles.statusRow}>
-            {STATUSES.map((s) => {
+          <Text style={styles.sectionTitle}>WORKFLOW · TAP TO ADVANCE</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.statusRow}
+          >
+            {STATUSES.map((s, idx) => {
               const active = job.status === s;
-              const c = statusColor(s);
+              const meta = STATUS_META[s];
+              const c = meta.color;
               return (
                 <TouchableOpacity
                   key={s}
@@ -216,19 +334,24 @@ export default function JobDetailScreen() {
                   {savingStatus === s ? (
                     <ActivityIndicator color={c} size="small" />
                   ) : (
-                    <Text
-                      style={[
-                        styles.statusBtnText,
-                        { color: active ? c : colors.textDim },
-                      ]}
-                    >
-                      {statusLabel(s)}
-                    </Text>
+                    <>
+                      <Text style={[styles.statusStep, { color: active ? c : colors.textMuted }]}>
+                        {idx + 1}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.statusBtnText,
+                          { color: active ? c : colors.textDim },
+                        ]}
+                      >
+                        {meta.short}
+                      </Text>
+                    </>
                   )}
                 </TouchableOpacity>
               );
             })}
-          </View>
+          </ScrollView>
         </View>
 
         {/* Vehicle info */}
@@ -440,6 +563,162 @@ export default function JobDetailScreen() {
             </>
           )}
         </TouchableOpacity>
+
+        {/* Billing */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>BILLING · INVOICE</Text>
+          <View style={styles.billCard}>
+            <View style={styles.billRow}>
+              <Text style={styles.billLabel}>PARTS SUBTOTAL</Text>
+              <Text style={styles.billValue}>₹{(job.parts_total ?? 0).toFixed(2)}</Text>
+            </View>
+            <View style={styles.billRow}>
+              <Text style={styles.billLabel}>LABOUR CHARGES</Text>
+              <TextInput
+                testID="labour-input"
+                value={labour}
+                onChangeText={setLabour}
+                keyboardType="numeric"
+                placeholder="0"
+                placeholderTextColor={colors.textMuted}
+                style={styles.billInput}
+              />
+            </View>
+            <View style={styles.billRow}>
+              <Text style={styles.billLabel}>DISCOUNT (-)</Text>
+              <TextInput
+                testID="discount-input"
+                value={discount}
+                onChangeText={setDiscount}
+                keyboardType="numeric"
+                placeholder="0"
+                placeholderTextColor={colors.textMuted}
+                style={styles.billInput}
+              />
+            </View>
+            <View style={styles.billRow}>
+              <Text style={styles.billLabel}>GST %</Text>
+              <TextInput
+                testID="gst-input"
+                value={gstRate}
+                onChangeText={setGstRate}
+                keyboardType="numeric"
+                placeholder="18"
+                placeholderTextColor={colors.textMuted}
+                style={styles.billInput}
+              />
+            </View>
+            <View style={[styles.billRow, styles.billDivider]}>
+              <Text style={styles.billLabel}>GST AMOUNT</Text>
+              <Text style={styles.billValue}>₹{(job.gst_amount ?? 0).toFixed(2)}</Text>
+            </View>
+            <View style={styles.billRow}>
+              <Text style={styles.billTotalLabel}>GRAND TOTAL</Text>
+              <Text style={styles.billTotal} testID="grand-total">
+                ₹{(job.total_amount ?? 0).toFixed(2)}
+              </Text>
+            </View>
+          </View>
+
+          <TouchableOpacity
+            testID="save-billing"
+            onPress={saveBilling}
+            disabled={savingBilling}
+            style={[styles.saveBillBtn, savingBilling && { opacity: 0.6 }]}
+            activeOpacity={0.85}
+          >
+            {savingBilling ? (
+              <ActivityIndicator color={colors.accent} />
+            ) : (
+              <>
+                <Ionicons name="calculator" size={16} color={colors.accent} />
+                <Text style={styles.saveBillText}>RECALCULATE & SAVE</Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            testID="download-invoice"
+            onPress={downloadInvoice}
+            disabled={downloadingInvoice}
+            style={[styles.invoiceBtn, downloadingInvoice && { opacity: 0.6 }]}
+            activeOpacity={0.85}
+          >
+            {downloadingInvoice ? (
+              <ActivityIndicator color="#000" />
+            ) : (
+              <>
+                <Ionicons name="document-text" size={18} color="#000" />
+                <Text style={styles.invoiceBtnText}>GENERATE PDF INVOICE</Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+          <Text style={styles.paymentLabel}>PAYMENT STATUS</Text>
+          <View style={styles.paymentRow}>
+            {(["unpaid", "partial", "paid"] as const).map((ps) => {
+              const active = (job.payment_status || "unpaid") === ps;
+              const c = PAYMENT_META[ps].color;
+              return (
+                <TouchableOpacity
+                  key={ps}
+                  testID={`payment-${ps}`}
+                  onPress={() => setPaymentStatus(ps)}
+                  disabled={savingBilling}
+                  style={[
+                    styles.paymentBtn,
+                    {
+                      borderColor: active ? c : colors.border,
+                      backgroundColor: active ? `${c}1F` : colors.surface,
+                    },
+                  ]}
+                  activeOpacity={0.85}
+                >
+                  <Text
+                    style={[
+                      styles.paymentText,
+                      { color: active ? c : colors.textDim },
+                    ]}
+                  >
+                    {PAYMENT_META[ps].label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
+        {/* Status History */}
+        {job.status_history && job.status_history.length > 0 ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>WORKFLOW AUDIT · LATEST FIRST</Text>
+            <View style={styles.historyList}>
+              {[...(job.status_history || [])].reverse().map((h, i) => (
+                <View key={i} style={styles.historyRow} testID={`history-${i}`}>
+                  <View
+                    style={[
+                      styles.historyDot,
+                      { backgroundColor: statusColor(h.status) },
+                    ]}
+                  />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.historyStatus, { color: statusColor(h.status) }]}>
+                      {statusLabel(h.status)}
+                    </Text>
+                    <Text style={styles.historyMeta}>
+                      {h.changed_by_name || "—"} · {(h.changed_at || "").slice(0, 16).replace("T", " ")}
+                    </Text>
+                    {h.note ? <Text style={styles.historyNote}>{h.note}</Text> : null}
+                  </View>
+                </View>
+              ))}
+            </View>
+          </View>
+        ) : null}
+
+        {job.job_card_no ? (
+          <Text style={styles.jobCardFooter}>Job Card # {job.job_card_no}</Text>
+        ) : null}
       </KeyboardAwareScrollView>
 
       <Modal
@@ -526,16 +805,23 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
 
-  statusRow: { flexDirection: "row", gap: 8 },
+  statusRow: { flexDirection: "row", gap: 8, paddingRight: 20 },
   statusBtn: {
-    flex: 1,
     borderWidth: 1,
-    paddingVertical: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     alignItems: "center",
     justifyContent: "center",
-    minHeight: 42,
+    minWidth: 96,
+    minHeight: 52,
   },
-  statusBtnText: { fontSize: 11, fontWeight: "900", letterSpacing: 1.4 },
+  statusStep: {
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1,
+    marginBottom: 2,
+  },
+  statusBtnText: { fontSize: 10, fontWeight: "900", letterSpacing: 1.2 },
 
   infoCard: {
     backgroundColor: colors.surface,
@@ -669,6 +955,117 @@ const styles = StyleSheet.create({
     marginTop: 22,
   },
   saveBtnText: { color: "#000", fontWeight: "900", letterSpacing: 2 },
+
+  billCard: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 14,
+  },
+  billRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 8,
+  },
+  billDivider: {
+    borderTopWidth: 1,
+    borderColor: colors.border,
+    marginTop: 6,
+    paddingTop: 12,
+  },
+  billLabel: {
+    color: colors.textDim,
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 1.4,
+  },
+  billValue: { color: colors.text, fontSize: 14, fontWeight: "700" },
+  billInput: {
+    backgroundColor: colors.bg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    color: colors.text,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    fontSize: 14,
+    minWidth: 100,
+    textAlign: "right",
+  },
+  billTotalLabel: { color: colors.accent, fontSize: 12, fontWeight: "900", letterSpacing: 1.5 },
+  billTotal: { color: colors.accent, fontSize: 22, fontWeight: "900", letterSpacing: -0.5 },
+
+  saveBillBtn: {
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    paddingVertical: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  saveBillText: { color: colors.accent, fontWeight: "900", letterSpacing: 1.5, fontSize: 12 },
+  invoiceBtn: {
+    marginTop: 10,
+    backgroundColor: colors.accent,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    paddingVertical: 14,
+  },
+  invoiceBtnText: { color: "#000", fontWeight: "900", letterSpacing: 1.5, fontSize: 12 },
+
+  paymentLabel: {
+    color: colors.textDim,
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 2,
+    marginTop: 18,
+    marginBottom: 8,
+  },
+  paymentRow: { flexDirection: "row", gap: 8 },
+  paymentBtn: {
+    flex: 1,
+    borderWidth: 1,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  paymentText: { fontSize: 11, fontWeight: "900", letterSpacing: 1.4 },
+
+  historyList: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  historyRow: {
+    flexDirection: "row",
+    gap: 12,
+    padding: 12,
+    borderBottomWidth: 1,
+    borderColor: colors.border,
+    alignItems: "flex-start",
+  },
+  historyDot: { width: 10, height: 10, marginTop: 4 },
+  historyStatus: { fontSize: 11, fontWeight: "900", letterSpacing: 1.3 },
+  historyMeta: { color: colors.textMuted, fontSize: 11, marginTop: 3 },
+  historyNote: {
+    color: colors.textDim,
+    fontSize: 12,
+    marginTop: 4,
+    fontStyle: "italic",
+  },
+
+  jobCardFooter: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 1.5,
+    textAlign: "center",
+    marginTop: 24,
+    marginHorizontal: 20,
+  },
 
   photoModal: {
     flex: 1,

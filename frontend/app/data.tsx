@@ -15,20 +15,9 @@ import * as Clipboard from "expo-clipboard";
 import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
 
-import { api } from "@/src/lib/api";
+import { api, fetchJobsXlsx } from "@/src/lib/api";
 import { colors, statusColor, statusLabel } from "@/src/lib/theme";
-import { storage } from "@/src/utils/storage";
 
-const TOKEN_KEY = "workshop_session_token";
-const BASE = process.env.EXPO_PUBLIC_BACKEND_URL || "";
-
-async function getToken(): Promise<string> {
-  const t =
-    Platform.OS === "web"
-      ? await storage.getItem<string>(TOKEN_KEY, "")
-      : await storage.secureGet<string>(TOKEN_KEY, "");
-  return (t as string) || "";
-}
 
 export default function DataScreen() {
   const router = useRouter();
@@ -126,11 +115,7 @@ export default function DataScreen() {
     if (busy) return;
     setBusy("xlsx");
     try {
-      const token = await getToken();
-      const url = `${BASE}/api/jobs/export.xlsx`;
-      const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const blob = await res.blob();
+      const blob = await fetchJobsXlsx();
       const filename = `workshop_jobs_${new Date()
         .toISOString()
         .slice(0, 19)

@@ -1,3 +1,4 @@
+
 import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect } from "react";
@@ -57,6 +58,11 @@ function Root() {
         <Stack.Screen name="login" />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="data" options={{ animation: "slide_from_right" }} />
+        <Stack.Screen name="staff" options={{ animation: "slide_from_right" }} />
+        <Stack.Screen name="settings" options={{ animation: "slide_from_right" }} />
+        <Stack.Screen name="inventory" options={{ animation: "slide_from_right" }} />
+        <Stack.Screen name="reminders" options={{ animation: "slide_from_right" }} />
+        <Stack.Screen name="customer/[key]" options={{ animation: "slide_from_right" }} />
         <Stack.Screen name="job/[id]" options={{ animation: "slide_from_right" }} />
       </Stack>
     </View>

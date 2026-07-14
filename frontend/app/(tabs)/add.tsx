@@ -34,6 +34,7 @@ export default function AddJobScreen() {
   const [carName, setCarName] = useState("");
   const [carNumber, setCarNumber] = useState("");
   const [modelYear, setModelYear] = useState("");
+  const [odometer, setOdometer] = useState("");
   const [reference, setReference] = useState("");
   const [problems, setProblems] = useState("");
   const [photos, setPhotos] = useState<Record<PhotoSlot, string | null>>({
@@ -61,6 +62,7 @@ export default function AddJobScreen() {
     setCarName("");
     setCarNumber("");
     setModelYear("");
+    setOdometer("");
     setReference("");
     setProblems("");
     setPhotos({ front: null, back: null, left: null, right: null });
@@ -76,6 +78,7 @@ export default function AddJobScreen() {
         car_name: carName.trim(),
         car_number: carNumber.trim(),
         model_year: modelYear.trim() || null,
+        odometer_km: odometer ? parseInt(odometer, 10) : null,
         reference: reference.trim() || null,
         customer_problems: problems.trim(),
         photos,
@@ -163,6 +166,14 @@ export default function AddJobScreen() {
           placeholder="DL 01 AB 1234"
           autoCapitalize="characters"
           testID="input-car-number"
+        />
+        <Field
+          label="ODOMETER (KM)"
+          value={odometer}
+          onChangeText={setOdometer}
+          placeholder="e.g. 45230"
+          keyboardType="numeric"
+          testID="input-odometer"
         />
 
         <SectionTitle>PROBLEM REPORTED</SectionTitle>

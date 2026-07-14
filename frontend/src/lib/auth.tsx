@@ -1,8 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { Platform } from "react-native";
-import * as WebBrowser from "expo-web-browser";
 import * as Linking from "expo-linking";
-import { api, setToken, clearToken } from "./api";
+import { api, getAccessToken, setAccessToken, setRefreshToken, clearTokens, mockMode } from "./api";
 
 export type AuthUser = {
   user_id: string;
@@ -43,7 +42,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const exchangeAndSet = useCallback(async (session_id: string) => {
     const res = await api.exchangeSession(session_id);
-    await setToken(res.session_token);
+    // backend may return accessToken/refreshToken or legacy session_token
+    if ((res as any).accessToken) {
+      await setAccessToken((res as any).accessToken);
+      await setRefreshToken((res as any).refreshToken || null);
+    } else if ((res as any).session_token) {
+      await setAccessToken((res as any).session_token);
+    }
     setUser(res.user);
   }, []);
 
@@ -77,6 +82,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             }
           }
         }
+        const storedToken = await getAccessToken();
+        if (mockMode && !storedToken) {
+          const res = await api.login();
+          if ((res as any).accessToken) {
+            await setAccessToken((res as any).accessToken);
+            await setRefreshToken((res as any).refreshToken || null);
+          }
+          setUser(res.user);
+          setLoading(false);
+          return;
+        }
         await refresh();
       } catch (e) {
         console.warn("auth bootstrap", e);
@@ -104,30 +120,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [exchangeAndSet]);
 
   const login = useCallback(async () => {
-    const redirectUrl =
-      Platform.OS === "web"
-        ? `${window.location.origin}/`
-        : Linking.createURL("auth");
-    const authUrl = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(
-      redirectUrl,
-    )}`;
-
-    if (Platform.OS === "web") {
-      window.location.href = authUrl;
-      return;
+    const res = await api.login();
+    if ((res as any).accessToken) {
+      await setAccessToken((res as any).accessToken);
+      await setRefreshToken((res as any).refreshToken || null);
+    } else if ((res as any).session_token) {
+      await setAccessToken((res as any).session_token);
     }
-    const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUrl);
-    if (result.type === "success" && result.url) {
-      const sid = extractSessionId(result.url);
-      if (sid) await exchangeAndSet(sid);
-    }
-  }, [exchangeAndSet]);
+    setUser(res.user);
+  }, []);
 
   const logout = useCallback(async () => {
     try {
       await api.logout();
     } catch {}
-    await clearToken();
+    await clearTokens();
     setUser(null);
   }, []);
 

@@ -5,13 +5,13 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 
 import { useAuth } from "@/src/lib/auth";
+import { fetchJobsCsv } from "@/src/lib/api";
 import { colors } from "@/src/lib/theme";
 import { downloadJobsCsv } from "@/src/lib/export";
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { user, logout } = useAuth();
-  const [downloading, setDownloading] = useState(false);
+  const { user, logout } = useAuth();  const [downloading, setDownloading] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
   const onExport = async () => {
@@ -32,17 +32,7 @@ export default function ProfileScreen() {
     if (downloading) return;
     setDownloading(true);
     try {
-      const BASE = process.env.EXPO_PUBLIC_BACKEND_URL || "";
-      const tokenRaw = await (await import("@/src/utils/storage")).storage.getItem<string>(
-        "workshop_session_token",
-        "",
-      );
-      const token = (tokenRaw as string) || "";
-      const res = await fetch(`${BASE}/api/jobs/export.csv`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const text = await res.text();
+      const text = await fetchJobsCsv();
       if (Platform.OS === "web") {
         const blob = new Blob([text], { type: "text/csv;charset=utf-8" });
         const url = URL.createObjectURL(blob);
@@ -121,6 +111,37 @@ export default function ProfileScreen() {
         <Ionicons name="chevron-forward" size={16} color="#000" />
       </TouchableOpacity>
 
+      <View style={styles.linksBlock}>
+        <LinkRow
+          testID="link-inventory"
+          icon="cube"
+          label="INVENTORY & PARTS"
+          hint="Stock, low-stock alerts, Excel export"
+          onPress={() => router.push("/inventory")}
+        />
+        <LinkRow
+          testID="link-reminders"
+          icon="notifications"
+          label="SERVICE REMINDERS"
+          hint="Vehicles overdue · one-tap WhatsApp send"
+          onPress={() => router.push("/reminders")}
+        />
+        <LinkRow
+          testID="link-staff"
+          icon="people-circle"
+          label="STAFF & ROLES"
+          hint="Manage mechanics, service advisors, managers"
+          onPress={() => router.push("/staff")}
+        />
+        <LinkRow
+          testID="link-settings"
+          icon="settings"
+          label="WORKSHOP SETTINGS"
+          hint="Name, address, GSTIN, GST rate, UPI"
+          onPress={() => router.push("/settings")}
+        />
+      </View>
+
       <TouchableOpacity
         testID="export-csv-button"
         activeOpacity={0.85}
@@ -171,6 +192,33 @@ export default function ProfileScreen() {
         </View>
       ) : null}
     </SafeAreaView>
+  );
+}
+
+function LinkRow({
+  testID,
+  icon,
+  label,
+  hint,
+  onPress,
+}: {
+  testID: string;
+  icon: any;
+  label: string;
+  hint: string;
+  onPress: () => void;
+}) {
+  return (
+    <TouchableOpacity testID={testID} onPress={onPress} activeOpacity={0.85} style={styles.linkRow}>
+      <View style={styles.linkIcon}>
+        <Ionicons name={icon} size={18} color={colors.accent} />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.linkLabel}>{label}</Text>
+        <Text style={styles.linkHint}>{hint}</Text>
+      </View>
+      <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+    </TouchableOpacity>
   );
 }
 
@@ -266,6 +314,32 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accent,
   },
   viewDataText: { color: "#000", fontWeight: "900", letterSpacing: 2, fontSize: 13, flex: 1, textAlign: "center" },
+
+  linksBlock: {
+    marginTop: 12,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  linkRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 14,
+    borderBottomWidth: 1,
+    borderColor: colors.border,
+  },
+  linkIcon: {
+    width: 36,
+    height: 36,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.bg,
+  },
+  linkLabel: { color: colors.text, fontWeight: "900", letterSpacing: 1.2, fontSize: 12 },
+  linkHint: { color: colors.textDim, fontSize: 11, marginTop: 2 },
   exportAlt: {
     flexDirection: "row",
     alignItems: "center",

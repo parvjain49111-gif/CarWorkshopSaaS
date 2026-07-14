@@ -8,7 +8,8 @@ import {
   TouchableOpacity,
   RefreshControl,
   ActivityIndicator,
-} from "react-native";import { SafeAreaView } from "react-native-safe-area-context";
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
 
@@ -24,13 +25,22 @@ const STATUSES = [
 ];
 
 export default function JobsScreen() {
+  type Job = {
+    job_id: string;
+    car_number: string;
+    car_name: string;
+    model_year?: string | null;
+    customer_name?: string | null;
+    reference?: string | null;
+    status: string;
+  };
   const router = useRouter();
   const params = useLocalSearchParams<{ status?: string }>();
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<string>(
     typeof params.status === "string" ? params.status : "all",
   );
-  const [jobs, setJobs] = useState<any[]>([]);
+  const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 

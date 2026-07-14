@@ -90,7 +90,7 @@ def test_create_job(state):
     job = r.json()
     assert "_id" not in job
     assert job["job_id"].startswith("job_")
-    assert job["status"] == "pending"
+    assert job["status"] == "vehicle_received"
     assert job["car_number"] == "KA01AB1234"
     assert job["created_by"] == "user_test_owner"
     assert job["photos"]["front"].startswith("data:image/")
@@ -121,10 +121,10 @@ def test_list_jobs_search_by_customer_name(state):
 
 
 def test_list_jobs_status_filter_pending(state):
-    r = requests.get(f"{API}/jobs", headers=OWNER_HDR, params={"status": "pending"}, timeout=15)
+    r = requests.get(f"{API}/jobs", headers=OWNER_HDR, params={"status": "vehicle_received"}, timeout=15)
     assert r.status_code == 200
     jobs = r.json()
-    assert all(j["status"] == "pending" for j in jobs)
+    assert all(j["status"] == "vehicle_received" for j in jobs)
     assert any(j["job_id"] == state["job_id"] for j in jobs)
 
 
@@ -143,7 +143,7 @@ def test_get_job_404():
 
 def test_patch_job_to_in_progress(state):
     payload = {
-        "status": "in_progress",
+        "status": "repair_started",
         "mechanic_findings": "Front brake pads worn 80%, AC gas low.",
         "spare_parts": [
             {"name": "Front brake pads", "quantity": 1, "price": 1800.0, "status": "pending"},
@@ -153,13 +153,13 @@ def test_patch_job_to_in_progress(state):
     r = requests.patch(f"{API}/jobs/{state['job_id']}", headers=OWNER_HDR, json=payload, timeout=15)
     assert r.status_code == 200, r.text
     job = r.json()
-    assert job["status"] == "in_progress"
+    assert job["status"] == "repair_started"
     assert job["mechanic_findings"].startswith("Front brake")
     assert len(job["spare_parts"]) == 2
 
     # verify via GET
     g = requests.get(f"{API}/jobs/{state['job_id']}", headers=OWNER_HDR, timeout=15).json()
-    assert g["status"] == "in_progress"
+    assert g["status"] == "repair_started"
     assert len(g["spare_parts"]) == 2
 
 
@@ -167,11 +167,11 @@ def test_patch_job_to_completed(state):
     r = requests.patch(
         f"{API}/jobs/{state['job_id']}",
         headers=OWNER_HDR,
-        json={"status": "completed"},
+        json={"status": "delivered"},
         timeout=15,
     )
     assert r.status_code == 200
-    assert r.json()["status"] == "completed"
+    assert r.json()["status"] == "delivered"
 
 
 def test_patch_job_invalid_status(state):
@@ -181,7 +181,7 @@ def test_patch_job_invalid_status(state):
         json={"status": "BOGUS"},
         timeout=15,
     )
-    assert r.status_code == 422
+    assert r.status_code == 400
 
 
 # -------- Stats --------
@@ -189,7 +189,7 @@ def test_stats():
     r = requests.get(f"{API}/stats", headers=OWNER_HDR, timeout=15)
     assert r.status_code == 200, r.text
     s = r.json()
-    for k in ["total", "pending", "in_progress", "completed", "recent"]:
+    for k in ["total", "open", "working", "ready", "delivered", "recent", "by_status"]:
         assert k in s
     assert isinstance(s["recent"], list)
     assert all("_id" not in r for r in s["recent"])

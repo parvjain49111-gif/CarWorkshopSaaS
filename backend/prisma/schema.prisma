@@ -1,0 +1,486 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Workshop {
+  id        String    @id @default(cuid())
+  name      String
+  gstNumber String?  @db.VarChar(32)
+  phone     String?
+  email     String?
+  address   String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  branches     Branch[]
+  users        User[]
+  customers    Customer[]
+  vehicles     Vehicle[]
+  jobCards     JobCard[]
+  parts        Part[]
+  suppliers    Supplier[]
+  invoices     Invoice[]
+  reminders    ReminderRule[]
+  messageTemplates MessageTemplate[]
+  auditLogs    AuditLog[]
+}
+
+model Branch {
+  id            String    @id @default(cuid())
+  workshop      Workshop  @relation(fields: [workshopId], references: [id])
+  workshopId    String
+  name          String
+  location      String?
+  phone         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  users      User[]
+  jobCards   JobCard[]
+  parts      Part[]
+  suppliers  Supplier[]
+  invoices   Invoice[]
+}
+
+model User {
+  id           String    @id @default(cuid())
+  workshop     Workshop  @relation(fields: [workshopId], references: [id])
+  workshopId   String
+  branch       Branch?   @relation(fields: [branchId], references: [id])
+  branchId     String?
+  name         String
+  email        String    @unique
+  phone        String?
+  passwordHash String
+  role         UserRole @default(SERVICE_ADVISOR)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  createdJobs  JobCard[]  @relation("AdvisorJobs")
+  assignedJobs JobCard[]  @relation("MechanicJobs")
+  auditLogs   AuditLog[]
+}
+
+model Customer {
+  id             String    @id @default(cuid())
+  workshop       Workshop  @relation(fields: [workshopId], references: [id])
+  workshopId     String
+  name           String
+  phone          String
+  alternatePhone String?
+  email          String?
+  address        String?
+  gstNumber      String?   @db.VarChar(32)
+  loyaltyScore   Int       @default(0)
+  lifetimeSpend  Float     @default(0.0)
+  notes          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  vehicles Vehicle[]
+  jobCards JobCard[]
+  reminders ReminderRule[]
+  invoices Invoice[]
+}
+
+model Vehicle {
+  id                String    @id @default(cuid())
+  workshop          Workshop  @relation(fields: [workshopId], references: [id])
+  workshopId        String
+  customer          Customer  @relation(fields: [customerId], references: [id])
+  customerId        String
+  registrationNumber String   @unique
+  model             String
+  company           String
+  fuelType          FuelType
+  engineNumber      String?   @db.VarChar(64)
+  chassisNumber     String?   @db.VarChar(64)
+  insuranceExpiry   DateTime?
+  pucExpiry         DateTime?
+  rcExpiry          DateTime?
+  lastServiceAt     DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  jobCards JobCard[]
+}
+
+model JobCard {
+  id                  String    @id @default(cuid())
+  jobCardNumber       String    @unique
+  workshop            Workshop  @relation(fields: [workshopId], references: [id])
+  workshopId          String
+  branch              Branch?   @relation(fields: [branchId], references: [id])
+  branchId            String?
+  customer            Customer  @relation(fields: [customerId], references: [id])
+  customerId          String
+  vehicle             Vehicle   @relation(fields: [vehicleId], references: [id])
+  vehicleId           String
+  registrationNumber  String
+  vin                 String?
+  odometerReading     Int?
+  assignedAdvisor     User?     @relation("AdvisorJobs", fields: [assignedAdvisorId], references: [id])
+  assignedAdvisorId   String?
+  assignedMechanic    User?     @relation("MechanicJobs", fields: [assignedMechanicId], references: [id])
+  assignedMechanicId  String?
+  serviceType         String
+  complaintDescription String
+  technicianNotes     String?
+  labourCharges       Float     @default(0.0)
+  gstPercent          Float     @default(18.0)
+  discountAmount      Float     @default(0.0)
+  totalAmount         Float     @default(0.0)
+  paymentStatus       PaymentStatus @default(PENDING)
+  vehicleStatus       VehicleStatus @default(VEHICLE_RECEIVED)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  parts         JobPartUsage[]
+  statuses      JobStatusHistory[]
+  invoice       Invoice?
+}
+
+model JobStatusHistory {
+  id         String        @id @default(cuid())
+  jobCard    JobCard       @relation(fields: [jobCardId], references: [id])
+  jobCardId  String
+  status     VehicleStatus
+  changedBy  User?         @relation(fields: [changedById], references: [id])
+  changedById String?
+  note       String?
+  timestamp  DateTime      @default(now())
+}
+
+model JobPartUsage {
+  id         String    @id @default(cuid())
+  jobCard    JobCard   @relation(fields: [jobCardId], references: [id])
+  jobCardId  String
+  part       Part?     @relation(fields: [partId], references: [id])
+  partId     String?
+  description String
+  quantity   Int       @default(1)
+  unitPrice  Float     @default(0.0)
+  gstPercent Float     @default(18.0)
+  totalPrice Float     @default(0.0)
+  status     PartStatus @default(PENDING)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+}
+
+model Part {
+  id              String    @id @default(cuid())
+  workshop        Workshop  @relation(fields: [workshopId], references: [id])
+  workshopId      String
+  branch          Branch?   @relation(fields: [branchId], references: [id])
+  branchId        String?
+  partNumber      String
+  barcode         String?
+  qrCode          String?
+  oemNumber       String?
+  name            String
+  category        String?
+  brand           String?
+  supplier        Supplier? @relation(fields: [supplierId], references: [id])
+  supplierId      String?
+  purchasePrice   Float     @default(0.0)
+  mrp             Float     @default(0.0)
+  gstPercent      Float     @default(18.0)
+  quantity        Int       @default(0)
+  reservedQuantity Int      @default(0)
+  minimumStock    Int       @default(0)
+  warehouseLocation String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  transactions InventoryTransaction[]
+  usages       JobPartUsage[]
+}
+
+model InventoryTransaction {
+  id             String       @id @default(cuid())
+  part           Part         @relation(fields: [partId], references: [id])
+  partId         String
+  workshop       Workshop     @relation(fields: [workshopId], references: [id])
+  workshopId     String
+  branch         Branch?      @relation(fields: [branchId], references: [id])
+  branchId       String?
+  jobCard        JobCard?     @relation(fields: [jobCardId], references: [id])
+  jobCardId      String?
+  type           InventoryTransactionType
+  quantity       Int
+  unitCost       Float        @default(0.0)
+  totalCost      Float        @default(0.0)
+  remarks        String?
+  createdBy      User?        @relation(fields: [createdById], references: [id])
+  createdById    String?
+  createdAt      DateTime     @default(now())
+}
+
+model Supplier {
+  id         String    @id @default(cuid())
+  workshop   Workshop  @relation(fields: [workshopId], references: [id])
+  workshopId String
+  name       String
+  phone      String?
+  email      String?
+  address    String?
+  gstNumber  String?   @db.VarChar(32)
+  notes      String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  parts      Part[]
+  purchaseOrders PurchaseOrder[]
+}
+
+model PurchaseOrder {
+  id           String    @id @default(cuid())
+  workshop     Workshop  @relation(fields: [workshopId], references: [id])
+  workshopId   String
+  branch       Branch?   @relation(fields: [branchId], references: [id])
+  branchId     String?
+  supplier     Supplier  @relation(fields: [supplierId], references: [id])
+  supplierId   String
+  orderNumber  String    @unique
+  status       PurchaseOrderStatus @default(PENDING)
+  totalAmount  Float     @default(0.0)
+  expectedDelivery DateTime?
+  createdBy    User?     @relation(fields: [createdById], references: [id])
+  createdById  String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model Invoice {
+  id            String    @id @default(cuid())
+  invoiceNumber String    @unique
+  workshop      Workshop  @relation(fields: [workshopId], references: [id])
+  workshopId    String
+  branch        Branch?   @relation(fields: [branchId], references: [id])
+  branchId      String?
+  customer      Customer  @relation(fields: [customerId], references: [id])
+  customerId    String
+  jobCard       JobCard?  @relation(fields: [jobCardId], references: [id])
+  jobCardId     String?
+  issueDate     DateTime  @default(now())
+  dueDate       DateTime?
+  lineItems     Json
+  labourAmount  Float     @default(0.0)
+  partsAmount   Float     @default(0.0)
+  taxAmount     Float     @default(0.0)
+  discountAmount Float    @default(0.0)
+  totalAmount   Float     @default(0.0)
+  qrCodeUrl     String?
+  paymentLink   String?
+  status        InvoiceStatus @default(DRAFT)
+  pdfUrl        String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  payments Payment[]
+}
+
+model Payment {
+  id             String    @id @default(cuid())
+  invoice        Invoice   @relation(fields: [invoiceId], references: [id])
+  invoiceId      String
+  jobCard        JobCard?  @relation(fields: [jobCardId], references: [id])
+  jobCardId      String?
+  amount         Float
+  method         PaymentMethod
+  status         PaymentStatus
+  transactionRef String?
+  paidAt         DateTime?
+  createdBy      User?     @relation(fields: [createdById], references: [id])
+  createdById    String?
+  createdAt      DateTime  @default(now())
+}
+
+model ReminderRule {
+  id              String    @id @default(cuid())
+  workshop        Workshop  @relation(fields: [workshopId], references: [id])
+  workshopId      String
+  branch          Branch?   @relation(fields: [branchId], references: [id])
+  branchId        String?
+  customer        Customer  @relation(fields: [customerId], references: [id])
+  customerId      String
+  vehicle         Vehicle?  @relation(fields: [vehicleId], references: [id])
+  vehicleId       String?
+  type            ReminderType
+  triggerAt       DateTime?
+  mileageThreshold Int?
+  repeatIntervalDays Int?
+  status          ReminderStatus @default(PENDING)
+  note            String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  logs ReminderLog[]
+}
+
+model ReminderLog {
+  id            String       @id @default(cuid())
+  reminderRule  ReminderRule @relation(fields: [reminderRuleId], references: [id])
+  reminderRuleId String
+  intent        String
+  sentAt        DateTime    @default(now())
+  channel       String
+  status        String
+  note          String?
+}
+
+model MessageTemplate {
+  id          String    @id @default(cuid())
+  workshop    Workshop  @relation(fields: [workshopId], references: [id])
+  workshopId  String
+  event       MessageEvent
+  title       String
+  bodyTemplate String
+  channel     MessageChannel
+  active      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  logs        MessageLog[]
+}
+
+model MessageLog {
+  id            String    @id @default(cuid())
+  workshop      Workshop  @relation(fields: [workshopId], references: [id])
+  workshopId    String
+  customer      Customer? @relation(fields: [customerId], references: [id])
+  customerId    String?
+  jobCard       JobCard?  @relation(fields: [jobCardId], references: [id])
+  jobCardId     String?
+  template      MessageTemplate? @relation(fields: [templateId], references: [id])
+  templateId    String?
+  channel       MessageChannel
+  payload       Json
+  status        String
+  response      Json?
+  sentAt        DateTime  @default(now())
+}
+
+model AuditLog {
+  id         String    @id @default(cuid())
+  workshop   Workshop  @relation(fields: [workshopId], references: [id])
+  workshopId String
+  user       User?     @relation(fields: [userId], references: [id])
+  userId     String?
+  action     String
+  entity     String
+  entityId   String
+  metadata   Json?
+  createdAt  DateTime  @default(now())
+}
+
+enum UserRole {
+  OWNER
+  MANAGER
+  SERVICE_ADVISOR
+  MECHANIC
+  ACCOUNTANT
+}
+
+enum FuelType {
+  PETROL
+  DIESEL
+  CNG
+  LPG
+  ELECTRIC
+  HYBRID
+}
+
+enum PaymentStatus {
+  PENDING
+  PARTIAL
+  PAID
+  FAILED
+}
+
+enum VehicleStatus {
+  VEHICLE_RECEIVED
+  INSPECTION
+  APPROVAL_PENDING
+  REPAIR_STARTED
+  QUALITY_CHECK
+  READY_FOR_DELIVERY
+  DELIVERED
+}
+
+enum PartStatus {
+  PENDING
+  ORDERED
+  INSTALLED
+}
+
+enum InventoryTransactionType {
+  PURCHASE
+  USAGE
+  RETURN
+  ADJUSTMENT
+  RESERVATION
+}
+
+enum PurchaseOrderStatus {
+  PENDING
+  ORDERED
+  RECEIVED
+  CANCELLED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  UPI
+  NETBANKING
+  WALLET
+}
+
+enum ReminderType {
+  DAYS
+  MONTHS
+  MILEAGE
+  INSURANCE
+  PUC
+  BATTERY
+  TYRE_ROTATION
+  OIL_CHANGE
+}
+
+enum ReminderStatus {
+  PENDING
+  SENT
+  CANCELLED
+}
+
+enum MessageEvent {
+  JOB_CREATED
+  VEHICLE_RECEIVED
+  INSPECTION_COMPLETE
+  APPROVAL_REQUIRED
+  REPAIR_STARTED
+  VEHICLE_READY
+  INVOICE_GENERATED
+  PAYMENT_RECEIVED
+  DELIVERY_COMPLETED
+  SERVICE_REMINDER
+}
+
+enum MessageChannel {
+  WHATSAPP
+  EMAIL
+  SMS
+}
