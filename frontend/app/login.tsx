@@ -80,8 +80,8 @@ export default function LoginScreen() {
               <ActivityIndicator color="#000" />
             ) : (
               <>
-                <Ionicons name="flash" size={18} color="#000" />
-                <Text style={styles.ctaText}>START DEMO MODE</Text>
+                <Ionicons name="logo-google" size={18} color="#000" />
+                <Text style={styles.ctaText}>CONTINUE WITH GOOGLE</Text>
               </>
             )}
           </TouchableOpacity>
