@@ -40,7 +40,7 @@ export default function LoginScreen() {
         resizeMode="cover"
       >
         <LinearGradient
-          colors={["rgba(10,10,10,0.65)", "rgba(10,10,10,0.92)", "#0A0A0A"]}
+          colors={["rgba(11,19,43,0.55)", "rgba(11,19,43,0.90)", "#0B132B"]}
           locations={[0, 0.55, 1]}
           style={StyleSheet.absoluteFillObject}
         />
@@ -114,31 +114,31 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     alignSelf: "flex-start",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: colors.accentSoft,
     borderWidth: 1,
     borderColor: colors.accent,
-    backgroundColor: "rgba(255,214,0,0.08)",
     marginBottom: 28,
   },
   dot: {
-    width: 6,
-    height: 6,
+    width: 6, height: 6, borderRadius: 3,
     backgroundColor: colors.accent,
     marginRight: 8,
   },
   badgeText: {
     color: colors.accent,
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "900",
-    letterSpacing: 3,
+    letterSpacing: 2.5,
   },
   title: {
     color: colors.text,
-    fontSize: 52,
+    fontSize: 48,
     fontWeight: "900",
-    letterSpacing: -2,
-    lineHeight: 56,
+    letterSpacing: -1.5,
+    lineHeight: 54,
   },
   titleAccent: { color: colors.accent },
   subtitle: {
@@ -146,7 +146,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
     marginTop: 18,
-    maxWidth: 340,
+    maxWidth: 360,
   },
   bottomBlock: { paddingBottom: 12 },
   featureRow: {
@@ -154,16 +154,11 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: 24,
     paddingVertical: 16,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: colors.border,
   },
   feature: { alignItems: "center", flex: 1 },
   featureIcon: {
-    width: 38,
-    height: 38,
-    borderWidth: 1,
-    borderColor: colors.border,
+    width: 46, height: 46,
+    borderRadius: 14,
     backgroundColor: colors.surface,
     alignItems: "center",
     justifyContent: "center",
@@ -173,7 +168,6 @@ const styles = StyleSheet.create({
     color: colors.textDim,
     fontSize: 11,
     fontWeight: "700",
-    letterSpacing: 1.5,
   },
   cta: {
     flexDirection: "row",
@@ -182,12 +176,13 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accent,
     paddingVertical: 18,
     gap: 10,
+    borderRadius: 14,
   },
   ctaText: {
-    color: "#000",
+    color: "#fff",
     fontSize: 14,
     fontWeight: "900",
-    letterSpacing: 2,
+    letterSpacing: 1.5,
   },
   legal: {
     color: colors.textMuted,

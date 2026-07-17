@@ -1,23 +1,49 @@
+// -----------------------------------------------------------------------------
+// Design tokens — single source of truth for the WorkshopOps app
+// Palette: deep-navy background, indigo cards, energetic orange accents.
+// Change any token here to cascade the entire app.
+// -----------------------------------------------------------------------------
+
 export const colors = {
-  bg: "#0A0A0A",
-  surface: "#171717",
-  surface2: "#1F1F1F",
-  border: "#262626",
-  borderStrong: "#3A3A3A",
+  // Backgrounds
+  bg: "#0B132B",
+  bgElevated: "#0F1937",
+  surface: "#1C2541",
+  surface2: "#233158",
+  surfaceHover: "#2A3663",
+
+  // Borders / dividers
+  border: "#334155",
+  borderStrong: "#475569",
+
+  // Text
   text: "#FFFFFF",
-  textDim: "#A3A3A3",
-  textMuted: "#737373",
-  accent: "#FFD600",
-  accentHover: "#FACC15",
-  danger: "#FF3B30",
-  warning: "#FF9100",
-  success: "#00E676",
+  textDim: "#94A3B8",
+  textMuted: "#64748B",
+
+  // Actions
+  accent: "#FF6B35",
+  accentHover: "#FF824F",
+  accentSoft: "#FF6B3520",
+  accentContrast: "#FFFFFF",
+
+  // Status
+  success: "#22C55E",
+  successSoft: "#22C55E20",
+  warning: "#FACC15",
+  warningSoft: "#FACC1520",
+  danger: "#EF4444",
+  dangerSoft: "#EF444420",
+
+  // Info accents (used for status pills only)
   info: "#3B82F6",
   violet: "#A855F7",
   cyan: "#22D3EE",
 };
 
-// Legacy 3-state statuses map to new 7-state flow
+// -----------------------------------------------------------------------------
+// Job Card 7-state flow — statuses + colors
+// -----------------------------------------------------------------------------
 const STATUS_MAP: Record<string, string> = {
   pending: "vehicle_received",
   in_progress: "repair_started",
@@ -55,15 +81,13 @@ export function normalizeStatus(s: string | undefined | null): JobStatus {
   return (STATUS_MAP[s] as JobStatus) || "vehicle_received";
 }
 
-export const statusColor = (status: string) =>
-  STATUS_META[normalizeStatus(status)]?.color || colors.textDim;
+export const statusColor = (s: string) => STATUS_META[normalizeStatus(s)]?.color || colors.textDim;
+export const statusLabel = (s: string) => STATUS_META[normalizeStatus(s)]?.label || s.toUpperCase();
+export const statusShort = (s: string) => STATUS_META[normalizeStatus(s)]?.short || s.toUpperCase();
 
-export const statusLabel = (status: string) =>
-  STATUS_META[normalizeStatus(status)]?.label || status.toUpperCase();
-
-export const statusShort = (status: string) =>
-  STATUS_META[normalizeStatus(status)]?.short || status.toUpperCase();
-
+// -----------------------------------------------------------------------------
+// Payment + Roles
+// -----------------------------------------------------------------------------
 export const PAYMENT_META: Record<string, { label: string; color: string }> = {
   unpaid: { label: "UNPAID", color: colors.danger },
   partial: { label: "PARTIAL", color: colors.warning },
@@ -78,15 +102,54 @@ export const ROLES = [
   { key: "accountant", label: "ACCOUNTANT", color: colors.cyan },
 ];
 
-export const roleLabel = (r: string) =>
-  ROLES.find((x) => x.key === r)?.label || r.toUpperCase();
+export const roleLabel = (r: string) => ROLES.find((x) => x.key === r)?.label || r.toUpperCase();
+export const roleColor = (r: string) => ROLES.find((x) => x.key === r)?.color || colors.textDim;
 
-export const roleColor = (r: string) =>
-  ROLES.find((x) => x.key === r)?.color || colors.textDim;
-
+// -----------------------------------------------------------------------------
+// Radius / spacing / shadow / typography
+// -----------------------------------------------------------------------------
 export const radius = {
-  sm: 4,
-  md: 6,
+  xs: 6,
+  sm: 10,
+  md: 14,
+  lg: 18,
+  xl: 24,
+  pill: 999,
 };
 
 export const spacing = (n: number) => n * 4;
+
+export const shadow = {
+  sm: {
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  md: {
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  lg: {
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.35,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+} as const;
+
+export const font = {
+  h1: { fontSize: 32, fontWeight: "900" as const, letterSpacing: -1 },
+  h2: { fontSize: 24, fontWeight: "900" as const, letterSpacing: -0.5 },
+  h3: { fontSize: 18, fontWeight: "800" as const, letterSpacing: -0.3 },
+  h4: { fontSize: 15, fontWeight: "800" as const, letterSpacing: 0 },
+  body: { fontSize: 14, fontWeight: "500" as const },
+  bodyStrong: { fontSize: 14, fontWeight: "700" as const },
+  caption: { fontSize: 12, fontWeight: "600" as const, letterSpacing: 0.2 },
+  micro: { fontSize: 10, fontWeight: "800" as const, letterSpacing: 1.5 },
+};

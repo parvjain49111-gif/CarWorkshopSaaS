@@ -1,16 +1,173 @@
 import React from "react";
-import { View, Text, StyleSheet, TouchableOpacity, Modal, Animated, Easing } from "react-native";
+import {
+  View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Animated, ViewStyle,
+} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { colors } from "@/src/lib/theme";
+import { colors, radius, shadow, font } from "@/src/lib/theme";
 
-/** Loading skeleton block. Use in place of raw ActivityIndicator on list screens. */
-export function Skeleton({ height = 60, width = "100%", style }: { height?: number; width?: any; style?: any }) {
+/* -------------------- Card -------------------- */
+export function Card({
+  children,
+  style,
+  onPress,
+  testID,
+  variant = "default",
+}: {
+  children: React.ReactNode;
+  style?: ViewStyle | ViewStyle[];
+  onPress?: () => void;
+  testID?: string;
+  variant?: "default" | "elevated" | "outline";
+}) {
+  const base: ViewStyle = {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: variant === "outline" ? 1 : 0,
+    borderColor: colors.border,
+    padding: 16,
+    ...(variant === "elevated" ? shadow.md : shadow.sm),
+  };
+  if (onPress) {
+    return (
+      <TouchableOpacity activeOpacity={0.85} onPress={onPress} testID={testID} style={[base, style]}>
+        {children}
+      </TouchableOpacity>
+    );
+  }
+  return <View testID={testID} style={[base, style]}>{children}</View>;
+}
+
+/* -------------------- Button -------------------- */
+type BtnVariant = "primary" | "secondary" | "danger" | "outline" | "ghost";
+
+export function Button({
+  label,
+  onPress,
+  variant = "primary",
+  icon,
+  iconRight,
+  loading,
+  disabled,
+  size = "md",
+  testID,
+  style,
+  block = false,
+}: {
+  label: string;
+  onPress?: () => void;
+  variant?: BtnVariant;
+  icon?: any;
+  iconRight?: any;
+  loading?: boolean;
+  disabled?: boolean;
+  size?: "sm" | "md" | "lg";
+  testID?: string;
+  style?: ViewStyle;
+  block?: boolean;
+}) {
+  const scale = React.useRef(new Animated.Value(1)).current;
+  const bgMap = {
+    primary: colors.accent,
+    secondary: colors.surface2,
+    danger: colors.danger,
+    outline: "transparent",
+    ghost: "transparent",
+  };
+  const fgMap = {
+    primary: colors.accentContrast,
+    secondary: colors.text,
+    danger: "#fff",
+    outline: colors.accent,
+    ghost: colors.textDim,
+  };
+  const bordMap = {
+    primary: "transparent",
+    secondary: colors.border,
+    danger: "transparent",
+    outline: colors.accent,
+    ghost: "transparent",
+  };
+  const padMap = {
+    sm: { paddingVertical: 8, paddingHorizontal: 12, minHeight: 36 },
+    md: { paddingVertical: 12, paddingHorizontal: 18, minHeight: 46 },
+    lg: { paddingVertical: 16, paddingHorizontal: 22, minHeight: 54 },
+  };
+  const fontSize = size === "sm" ? 11 : size === "lg" ? 14 : 12;
+
+  const bg = bgMap[variant];
+  const fg = fgMap[variant];
+  const bord = bordMap[variant];
+
+  const inner = loading ? (
+    <ActivityIndicator color={fg} size="small" />
+  ) : (
+    <>
+      {icon ? <Ionicons name={icon} size={size === "lg" ? 20 : 16} color={fg} /> : null}
+      <Text style={[styles.btnText, { color: fg, fontSize }]}>{label}</Text>
+      {iconRight ? <Ionicons name={iconRight} size={16} color={fg} /> : null}
+    </>
+  );
+
+  return (
+    <Animated.View style={{ transform: [{ scale }], alignSelf: block ? "stretch" : "flex-start" }}>
+      <TouchableOpacity
+        testID={testID}
+        activeOpacity={0.85}
+        disabled={disabled || loading}
+        onPressIn={() => Animated.spring(scale, { toValue: 0.97, useNativeDriver: true, speed: 40 }).start()}
+        onPressOut={() => Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 40 }).start()}
+        onPress={onPress}
+        style={[
+          styles.btn,
+          padMap[size],
+          { backgroundColor: bg, borderColor: bord, borderWidth: bord === "transparent" ? 0 : 1 },
+          (variant === "primary" || variant === "danger") && shadow.sm,
+          (disabled || loading) && { opacity: 0.5 },
+          style,
+        ]}
+      >
+        {inner}
+      </TouchableOpacity>
+    </Animated.View>
+  );
+}
+
+/* -------------------- ScreenHeader -------------------- */
+export function ScreenHeader({
+  title,
+  eyebrow,
+  onBack,
+  right,
+}: {
+  title: string;
+  eyebrow?: string;
+  onBack?: () => void;
+  right?: React.ReactNode;
+}) {
+  return (
+    <View style={styles.header}>
+      {onBack ? (
+        <TouchableOpacity onPress={onBack} hitSlop={10} style={styles.backBtn}>
+          <Ionicons name="chevron-back" size={22} color={colors.text} />
+        </TouchableOpacity>
+      ) : null}
+      <View style={{ flex: 1 }}>
+        {eyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}
+        <Text style={styles.title} numberOfLines={1}>{title}</Text>
+      </View>
+      {right}
+    </View>
+  );
+}
+
+/* -------------------- Skeleton -------------------- */
+export function Skeleton({ height = 60, width = "100%", style, radius: r }: { height?: number; width?: any; style?: any; radius?: number }) {
   const anim = React.useRef(new Animated.Value(0.5)).current;
   React.useEffect(() => {
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(anim, { toValue: 1, duration: 700, easing: Easing.linear, useNativeDriver: true }),
-        Animated.timing(anim, { toValue: 0.5, duration: 700, easing: Easing.linear, useNativeDriver: true }),
+        Animated.timing(anim, { toValue: 1, duration: 700, useNativeDriver: true }),
+        Animated.timing(anim, { toValue: 0.5, duration: 700, useNativeDriver: true }),
       ]),
     );
     loop.start();
@@ -19,69 +176,17 @@ export function Skeleton({ height = 60, width = "100%", style }: { height?: numb
   return (
     <Animated.View
       testID="skeleton"
-      style={[
-        {
-          height,
-          width,
-          backgroundColor: colors.surface,
-          borderWidth: 1,
-          borderColor: colors.border,
-          opacity: anim,
-        },
-        style,
-      ]}
+      style={[{
+        height, width,
+        backgroundColor: colors.surface,
+        borderRadius: r ?? radius.md,
+        opacity: anim,
+      }, style]}
     />
   );
 }
 
-/** Confirm dialog for destructive actions. */
-export function Confirm({
-  visible,
-  title,
-  message,
-  onCancel,
-  onConfirm,
-  confirmLabel = "CONFIRM",
-  destructive = false,
-}: {
-  visible: boolean;
-  title: string;
-  message: string;
-  onCancel: () => void;
-  onConfirm: () => void;
-  confirmLabel?: string;
-  destructive?: boolean;
-}) {
-  return (
-    <Modal transparent visible={visible} animationType="fade" onRequestClose={onCancel}>
-      <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onCancel}>
-        <View style={styles.card}>
-          <Ionicons
-            name={destructive ? "warning" : "help-circle"}
-            size={28}
-            color={destructive ? colors.danger : colors.accent}
-          />
-          <Text style={styles.title}>{title}</Text>
-          <Text style={styles.msg}>{message}</Text>
-          <View style={styles.row}>
-            <TouchableOpacity onPress={onCancel} style={styles.cancel} testID="confirm-cancel">
-              <Text style={styles.cancelText}>CANCEL</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={onConfirm}
-              style={[styles.yes, destructive && { backgroundColor: colors.danger }]}
-              testID="confirm-yes"
-            >
-              <Text style={styles.yesText}>{confirmLabel}</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </TouchableOpacity>
-    </Modal>
-  );
-}
-
-/** Standard empty state. */
+/* -------------------- EmptyState -------------------- */
 export function EmptyState({
   icon = "folder-open-outline",
   title,
@@ -97,51 +202,106 @@ export function EmptyState({
 }) {
   return (
     <View style={styles.empty} testID="empty-state">
-      <Ionicons name={icon} size={40} color={colors.textMuted} />
+      <View style={styles.emptyIcon}>
+        <Ionicons name={icon} size={36} color={colors.accent} />
+      </View>
       <Text style={styles.emptyTitle}>{title}</Text>
       {message ? <Text style={styles.emptyMsg}>{message}</Text> : null}
-      {cta && onCta ? (
-        <TouchableOpacity onPress={onCta} style={styles.emptyCta}>
-          <Text style={styles.emptyCtaText}>{cta}</Text>
-        </TouchableOpacity>
-      ) : null}
+      {cta && onCta ? <Button label={cta} onPress={onCta} style={{ marginTop: 20 }} /> : null}
+    </View>
+  );
+}
+
+/* -------------------- Confirm -------------------- */
+export function Confirm({
+  visible, title, message, onCancel, onConfirm, confirmLabel = "CONFIRM", destructive = false,
+}: {
+  visible: boolean; title: string; message: string;
+  onCancel: () => void; onConfirm: () => void;
+  confirmLabel?: string; destructive?: boolean;
+}) {
+  if (!visible) return null;
+  return (
+    <View style={styles.confirmBackdrop} pointerEvents="auto">
+      <View style={styles.confirmCard}>
+        <View style={[styles.confirmIcon, { backgroundColor: destructive ? colors.dangerSoft : colors.accentSoft }]}>
+          <Ionicons name={destructive ? "warning" : "help-circle"} size={28} color={destructive ? colors.danger : colors.accent} />
+        </View>
+        <Text style={styles.confirmTitle}>{title}</Text>
+        <Text style={styles.confirmMsg}>{message}</Text>
+        <View style={{ flexDirection: "row", gap: 10, marginTop: 20, width: "100%" }}>
+          <Button label="CANCEL" variant="secondary" onPress={onCancel} block style={{ flex: 1 } as any} />
+          <Button label={confirmLabel} variant={destructive ? "danger" : "primary"} onPress={onConfirm} block style={{ flex: 1 } as any} />
+        </View>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.75)",
+  btn: {
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    padding: 24,
+    gap: 8,
+    borderRadius: radius.md,
   },
-  card: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 24,
-    width: "100%",
-    maxWidth: 380,
+  btnText: {
+    ...font.h4,
+    fontWeight: "800",
+    letterSpacing: 1,
+  },
+  header: {
+    flexDirection: "row",
     alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 16,
   },
-  title: { color: colors.text, fontSize: 15, fontWeight: "900", letterSpacing: 1.5, marginTop: 14, marginBottom: 8 },
-  msg: { color: colors.textDim, fontSize: 13, textAlign: "center", lineHeight: 18 },
-  row: { flexDirection: "row", gap: 10, marginTop: 20, width: "100%" },
-  cancel: { flex: 1, borderWidth: 1, borderColor: colors.border, paddingVertical: 12, alignItems: "center" },
-  cancelText: { color: colors.textDim, fontWeight: "900", letterSpacing: 1.5 },
-  yes: { flex: 1, backgroundColor: colors.accent, paddingVertical: 12, alignItems: "center" },
-  yesText: { color: "#000", fontWeight: "900", letterSpacing: 1.5 },
+  backBtn: {
+    width: 42, height: 42,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface,
+    alignItems: "center", justifyContent: "center",
+  },
+  eyebrow: { color: colors.accent, fontSize: 10, fontWeight: "900", letterSpacing: 2 },
+  title: { ...font.h2, color: colors.text },
 
-  empty: { flex: 1, alignItems: "center", justifyContent: "center", padding: 40 },
-  emptyTitle: { color: colors.text, fontWeight: "900", fontSize: 15, marginTop: 12 },
-  emptyMsg: { color: colors.textDim, fontSize: 13, marginTop: 6, textAlign: "center", maxWidth: 260 },
-  emptyCta: {
-    marginTop: 16,
-    backgroundColor: colors.accent,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
+  empty: {
+    flex: 1, alignItems: "center", justifyContent: "center", padding: 40,
   },
-  emptyCtaText: { color: "#000", fontWeight: "900", letterSpacing: 1.5, fontSize: 12 },
+  emptyIcon: {
+    width: 80, height: 80,
+    borderRadius: radius.xl,
+    backgroundColor: colors.accentSoft,
+    alignItems: "center", justifyContent: "center",
+    marginBottom: 16,
+  },
+  emptyTitle: { color: colors.text, ...font.h3, marginBottom: 6 },
+  emptyMsg: { color: colors.textDim, ...font.body, textAlign: "center", maxWidth: 300 },
+
+  confirmBackdrop: {
+    position: "absolute", inset: 0 as any,
+    top: 0, bottom: 0, left: 0, right: 0,
+    backgroundColor: "rgba(0,0,0,0.7)",
+    alignItems: "center", justifyContent: "center",
+    padding: 24,
+    zIndex: 999,
+  },
+  confirmCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    padding: 24,
+    width: "100%", maxWidth: 380,
+    alignItems: "center",
+    ...shadow.lg,
+  },
+  confirmIcon: {
+    width: 68, height: 68, borderRadius: radius.pill,
+    alignItems: "center", justifyContent: "center",
+    marginBottom: 12,
+  },
+  confirmTitle: { color: colors.text, ...font.h3, marginBottom: 6, textAlign: "center" },
+  confirmMsg: { color: colors.textDim, ...font.body, textAlign: "center", lineHeight: 20 },
 });
